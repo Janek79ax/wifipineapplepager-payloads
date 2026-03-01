@@ -565,62 +565,28 @@ LOG "SUCCESS: Permissions configured"
 # ====================================================================
 LOG "Step 6: Creating Evil Portal init script..."
 
-# Determine source zone for firewall rules based on isolated subnet choice
-if [ "$BRIDGE_IF" = "br-evil" ]; then
-    FIREWALL_SRC="evil"
-else
-    FIREWALL_SRC="lan"
-fi
-
 cat > /etc/init.d/evilportal << INITEOF
 #!/bin/sh /etc/rc.common
 
 START=99
 
-# Helper function to add temporary nft rules directly to dstnat chain
-# (dstnat always exists, dstnat_lan only exists when UCI rules are present)
 add_nft_rules() {
-    # Add TEMPORARY nftables rules to the main dstnat chain with interface match
-    # These disappear on reboot since they're not in UCI config
-    nft insert rule inet fw4 dstnat iifname "${BRIDGE_IF}" meta nfproto ipv4 tcp dport 443 counter dnat ip to ${PORTAL_IP}:80
-    nft insert rule inet fw4 dstnat iifname "${BRIDGE_IF}" meta nfproto ipv4 tcp dport 80 counter dnat ip to ${PORTAL_IP}:80
-    nft insert rule inet fw4 dstnat iifname "${BRIDGE_IF}" meta nfproto ipv4 tcp dport 53 counter dnat ip to ${PORTAL_IP}:5353
-    nft insert rule inet fw4 dstnat iifname "${BRIDGE_IF}" meta nfproto ipv4 udp dport 53 counter dnat ip to ${PORTAL_IP}:5353
+    nft delete table ip evilportal 2>/dev/null
+    nft add table ip evilportal
+    nft add chain ip evilportal prerouting { type nat hook prerouting priority -100 \; policy accept \; }
+    nft add rule ip evilportal prerouting iifname "${BRIDGE_IF}" tcp dport 443 counter dnat to ${PORTAL_IP}:80
+    nft add rule ip evilportal prerouting iifname "${BRIDGE_IF}" tcp dport 80 counter dnat to ${PORTAL_IP}:80
+    nft add rule ip evilportal prerouting iifname "${BRIDGE_IF}" tcp dport 53 counter dnat to ${PORTAL_IP}:5353
+    nft add rule ip evilportal prerouting iifname "${BRIDGE_IF}" udp dport 53 counter dnat to ${PORTAL_IP}:5353
 }
 
-# Helper function to remove nft rules from memory
 remove_nft_rules() {
-    # Remove temporary rules from dstnat chain (the ones we added with iifname match)
-    nft -a list chain inet fw4 dstnat 2>/dev/null | grep "dnat ip to ${PORTAL_IP}" | awk '{print \$NF}' | while read handle; do
-        nft delete rule inet fw4 dstnat handle "\$handle" 2>/dev/null
-    done
-
-    # Also remove from dstnat_lan if it exists (for UCI-created rules)
-    nft -a list chain inet fw4 dstnat_lan 2>/dev/null | grep "dnat ip to ${PORTAL_IP}" | awk '{print \$NF}' | while read handle; do
-        nft delete rule inet fw4 dstnat_lan handle "\$handle" 2>/dev/null
-    done
-    
-    # Also remove from dstnat_evil if it exists
-    nft -a list chain inet fw4 dstnat_evil 2>/dev/null | grep "dnat ip to ${PORTAL_IP}" | awk '{print \$NF}' | while read handle; do
-        nft delete rule inet fw4 dstnat_evil handle "\$handle" 2>/dev/null
-    done
+    nft delete table ip evilportal 2>/dev/null
 }
 
-# Helper function to remove whitelist rules
 remove_whitelist_rules() {
-    # Remove from dstnat chain
-    nft -a list chain inet fw4 dstnat 2>/dev/null | grep "ip saddr.*accept" | awk '{print \$NF}' | while read handle; do
-        nft delete rule inet fw4 dstnat handle "\$handle" 2>/dev/null
-    done
-
-    # Also remove from dstnat_lan if it exists
-    nft -a list chain inet fw4 dstnat_lan 2>/dev/null | grep "ip saddr.*accept" | awk '{print \$NF}' | while read handle; do
-        nft delete rule inet fw4 dstnat_lan handle "\$handle" 2>/dev/null
-    done
-    
-    # Also remove from dstnat_evil if it exists
-    nft -a list chain inet fw4 dstnat_evil 2>/dev/null | grep "ip saddr.*accept" | awk '{print \$NF}' | while read handle; do
-        nft delete rule inet fw4 dstnat_evil handle "\$handle" 2>/dev/null
+    nft -a list chain ip evilportal prerouting 2>/dev/null | grep "ip saddr.*accept" | awk '{print \$NF}' | while read handle; do
+        nft delete rule ip evilportal prerouting handle "\$handle" 2>/dev/null
     done
 }
 
@@ -685,68 +651,12 @@ restart() {
 }
 
 enable() {
-    # Add PERSISTENT firewall NAT rules via UCI
-    uci add firewall redirect
-    uci set firewall.@redirect[-1].name='Evil Portal HTTPS'
-    uci set firewall.@redirect[-1].src='${FIREWALL_SRC}'
-    uci set firewall.@redirect[-1].proto='tcp'
-    uci set firewall.@redirect[-1].src_dport='443'
-    uci set firewall.@redirect[-1].dest_ip='${PORTAL_IP}'
-    uci set firewall.@redirect[-1].dest_port='80'
-    uci set firewall.@redirect[-1].target='DNAT'
-
-    uci add firewall redirect
-    uci set firewall.@redirect[-1].name='Evil Portal HTTP'
-    uci set firewall.@redirect[-1].src='${FIREWALL_SRC}'
-    uci set firewall.@redirect[-1].proto='tcp'
-    uci set firewall.@redirect[-1].src_dport='80'
-    uci set firewall.@redirect[-1].dest_ip='${PORTAL_IP}'
-    uci set firewall.@redirect[-1].dest_port='80'
-    uci set firewall.@redirect[-1].target='DNAT'
-
-    uci add firewall redirect
-    uci set firewall.@redirect[-1].name='Evil Portal DNS TCP'
-    uci set firewall.@redirect[-1].src='${FIREWALL_SRC}'
-    uci set firewall.@redirect[-1].proto='tcp'
-    uci set firewall.@redirect[-1].src_dport='53'
-    uci set firewall.@redirect[-1].dest_ip='${PORTAL_IP}'
-    uci set firewall.@redirect[-1].dest_port='5353'
-    uci set firewall.@redirect[-1].target='DNAT'
-
-    uci add firewall redirect
-    uci set firewall.@redirect[-1].name='Evil Portal DNS UDP'
-    uci set firewall.@redirect[-1].src='${FIREWALL_SRC}'
-    uci set firewall.@redirect[-1].proto='udp'
-    uci set firewall.@redirect[-1].src_dport='53'
-    uci set firewall.@redirect[-1].dest_ip='${PORTAL_IP}'
-    uci set firewall.@redirect[-1].dest_port='5353'
-    uci set firewall.@redirect[-1].target='DNAT'
-
-    uci commit firewall
-
-    # Create boot symlink
     ln -sf /etc/init.d/evilportal /etc/rc.d/S99evilportal
-
     logger -t evilportal "Evil Portal enabled (will start on next reboot)"
 }
 
 disable() {
-    # Remove boot symlink
     rm -f /etc/rc.d/*evilportal
-
-    # Remove PERSISTENT firewall NAT rules from UCI - delete from highest index to lowest
-    while uci show firewall | grep -q "Evil Portal"; do
-        # Get the last (highest index) redirect rule containing "Evil Portal"
-        LAST_INDEX=\$(uci show firewall | grep "redirect\[" | grep "Evil Portal" | tail -n1 | sed 's/.*redirect\[\([0-9]*\)\].*/\1/')
-        if [ -n "\$LAST_INDEX" ]; then
-            uci delete firewall.@redirect[\$LAST_INDEX]
-        else
-            break
-        fi
-    done
-
-    uci commit firewall
-
     logger -t evilportal "Evil Portal disabled (will not start on next reboot)"
 }
 INITEOF
@@ -770,7 +680,7 @@ while true; do
             # Skip if already processed
             if ! grep -q "^${ip}$" "$PROCESSED_FILE" 2>/dev/null; then
                 # Add nft rule - use dstnat chain directly (always exists)
-                nft insert rule inet fw4 dstnat ip saddr "$ip" accept
+                nft insert rule ip evilportal prerouting ip saddr "$ip" accept
                 # Mark as processed
                 echo "$ip" >> "$PROCESSED_FILE"
                 logger -t evilportal "Whitelisted client: $ip"
@@ -786,59 +696,11 @@ chmod +x /usr/bin/evilportal-whitelist-daemon
 LOG "SUCCESS: Init script and daemon created"
 
 # ====================================================================
-# STEP 7: Configure Firewall NAT Rules
+# STEP 7: Enable IP Forwarding
 # ====================================================================
-LOG "Step 7: Configuring firewall NAT rules..."
-
-# Determine source zone based on isolated subnet choice
-if [ "$BRIDGE_IF" = "br-evil" ]; then
-    FIREWALL_SRC="evil"
-else
-    FIREWALL_SRC="lan"
-fi
-
-uci add firewall redirect
-uci set firewall.@redirect[-1].name='Evil Portal HTTPS'
-uci set firewall.@redirect[-1].src="${FIREWALL_SRC}"
-uci set firewall.@redirect[-1].proto='tcp'
-uci set firewall.@redirect[-1].src_dport='443'
-uci set firewall.@redirect[-1].dest_ip="${PORTAL_IP}"
-uci set firewall.@redirect[-1].dest_port='80'
-uci set firewall.@redirect[-1].target='DNAT'
-
-uci add firewall redirect
-uci set firewall.@redirect[-1].name='Evil Portal HTTP'
-uci set firewall.@redirect[-1].src="${FIREWALL_SRC}"
-uci set firewall.@redirect[-1].proto='tcp'
-uci set firewall.@redirect[-1].src_dport='80'
-uci set firewall.@redirect[-1].dest_ip="${PORTAL_IP}"
-uci set firewall.@redirect[-1].dest_port='80'
-uci set firewall.@redirect[-1].target='DNAT'
-
-uci add firewall redirect
-uci set firewall.@redirect[-1].name='Evil Portal DNS TCP'
-uci set firewall.@redirect[-1].src="${FIREWALL_SRC}"
-uci set firewall.@redirect[-1].proto='tcp'
-uci set firewall.@redirect[-1].src_dport='53'
-uci set firewall.@redirect[-1].dest_ip="${PORTAL_IP}"
-uci set firewall.@redirect[-1].dest_port='5353'
-uci set firewall.@redirect[-1].target='DNAT'
-
-uci add firewall redirect
-uci set firewall.@redirect[-1].name='Evil Portal DNS UDP'
-uci set firewall.@redirect[-1].src="${FIREWALL_SRC}"
-uci set firewall.@redirect[-1].proto='udp'
-uci set firewall.@redirect[-1].src_dport='53'
-uci set firewall.@redirect[-1].dest_ip="${PORTAL_IP}"
-uci set firewall.@redirect[-1].dest_port='5353'
-uci set firewall.@redirect[-1].target='DNAT'
-
-uci commit firewall
-
-LOG "Restarting firewall..."
-/etc/init.d/firewall restart
-
-LOG "SUCCESS: Firewall rules configured"
+LOG "Step 7: Enabling IP forwarding..."
+echo 1 > /proc/sys/net/ipv4/ip_forward
+LOG "SUCCESS: IP forwarding enabled (NAT rules will be created by init script)"
 
 # ====================================================================
 # STEP 8: Start Services
@@ -904,7 +766,7 @@ fi
 
 # Verify NAT rules exist
 LOG "Verifying NAT rules..."
-if nft list ruleset 2>/dev/null | grep -q "dnat ip to ${PORTAL_IP}"; then
+if nft list ruleset 2>/dev/null | grep -q "dnat to ${PORTAL_IP}"; then
     LOG "SUCCESS: NAT rules configured"
 else
     LOG "ERROR: NAT rules not found"
