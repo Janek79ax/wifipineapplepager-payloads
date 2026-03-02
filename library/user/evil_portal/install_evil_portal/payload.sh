@@ -349,7 +349,11 @@ abstract class Portal
     protected function showSuccess()
     {
         header('Content-Type: text/html; charset=utf-8');
-        $target = htmlspecialchars($this->request->target, ENT_QUOTES, 'UTF-8');
+        // After authorization the client is whitelisted - DNS and forwarding work normally.
+        // Redirect to Apple captive portal detection URL. iOS CNA WebSheet will follow
+        // the redirect, get the real "Success" response from Apple, and close automatically.
+        // Android/other browsers simply see a harmless page.
+        $captiveClose = 'http://captive.apple.com/hotspot-detect.html';
         echo '<!DOCTYPE html><html><head><meta charset="utf-8">';
         echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
         echo '<title>Authorized</title>';
@@ -357,9 +361,8 @@ abstract class Portal
         echo '.ok{color:#2e7d32;font-size:48px;margin-bottom:20px}</style></head><body>';
         echo '<div class="ok">&#10004;</div>';
         echo '<h1>Authorized!</h1>';
-        echo '<p>You will be redirected in a moment...</p>';
-        echo '<p><a href="' . $target . '">Click here if not redirected</a></p>';
-        echo '<script>setTimeout(function(){window.location.href="' . $target . '";},3000);</script>';
+        echo '<p>Connecting you to the internet...</p>';
+        echo '<script>setTimeout(function(){window.location.href="' . $captiveClose . '";},3000);</script>';
         echo '</body></html>';
         exit;
     }
