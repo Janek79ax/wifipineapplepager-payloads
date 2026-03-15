@@ -3,7 +3,7 @@
 # Description: Configure and start captive portal on lan interfaces
 # Purpose: Display educational captive portal page with no additional configuration
 # Author: spencershepard (GRIMM)
-# Version: 1.3
+# Version: 1.4
 
 # IMPORTANT!  As of Pager Firware 1.0.4 the opkg source list is broken with a missing repository.  
 # To fix, comment out or remove the offending line (Hak5) in /etc/opkg/distfeeds.conf before installing packages.
@@ -45,6 +45,12 @@
 #	- Improved Android captive portal reliability (prevents ERR_SSL_PROTOCOL_ERROR)
 #	- Restart GoodPortal DNS hijack safely without affecting system dnsmasq
 #	- Replaced deprecated ALERT_RINGTONE with ALERT in whitelist monitor
+#    1.4 - Fixed dnsmasq daemonization causing false PID tracking (added -k flag)
+#	- Fixed IPv6 loopback bind failure (removed ::1 from listen-address)
+#	- Fixed captive portal not auto-triggering on phones: restart system dnsmasq
+#	  to flush DNS cache and trigger DHCP re-negotiation for client re-detection
+#	- Improved port 1053 cleanup with retry loop before dnsmasq start
+#	- Added diagnostic logging throughout (nginx, firewall, dnsmasq, syslog)
 # Todo:
 #   - add portal directory name to credentials log for easier identification
 #   - improve time delay after whitelisting and before client can access internet (currently 60+ seconds as of v1.2)
@@ -529,6 +535,15 @@ LOG "Starting nginx with init script..."
 /etc/init.d/nginx start
 sleep 2
 
+# Verify nginx is actually running
+if netstat -plant 2>/dev/null | grep -q ':80.*nginx'; then
+    LOG green "  nginx is listening on port 80"
+else
+    LOG red "  [WARNING] nginx does not appear to be listening on port 80"
+    LOG "  Processes on port 80:"
+    netstat -plant 2>/dev/null | grep ':80' | while read line; do LOG "    $line"; done
+fi
+
 
 LOG "Configuring firewall NAT rules..."
 
@@ -600,9 +615,18 @@ fi
 
 uci commit firewall
 
+LOG "Restarting firewall..."
 /etc/init.d/firewall restart
+FW_RC=$?
+if [ $FW_RC -eq 0 ]; then
+    LOG green "  Firewall restarted successfully"
+else
+    LOG red "  [WARNING] Firewall restart returned exit code $FW_RC"
+fi
 
-
+# Log active iptables NAT rules for diagnostics
+LOG "  Active NAT PREROUTING rules:"
+iptables -t nat -L PREROUTING -n 2>/dev/null | while read line; do LOG "    $line"; done
 
 LOG "Starting DNS hijacking..."
 
@@ -616,14 +640,42 @@ if [ -f /tmp/goodportal-dns.pid ]; then
 fi
 
 # Also kill any dnsmasq on port 1053 (fallback)
-kill $(netstat -plant 2>/dev/null | grep ':1053' | awk '{print $NF}' | sed 's/\/dnsmasq//g') 2>/dev/null
+for PID_1053 in $(netstat -plant 2>/dev/null | grep ':1053' | awk '{print $NF}' | sed 's/\/.*//g' | sort -u); do
+    kill $PID_1053 2>/dev/null && LOG "  Killed leftover process on port 1053 (PID: $PID_1053)"
+done
+
+# Wait for port 1053 to be released
+for i in 1 2 3 4 5; do
+    netstat -plant 2>/dev/null | grep -q ':1053' || break
+    LOG "  Waiting for port 1053 to be released (attempt $i/5)..."
+    sleep 1
+done
+if netstat -plant 2>/dev/null | grep -q ':1053'; then
+    LOG red "ERROR: Port 1053 still in use after waiting"
+    netstat -plant 2>/dev/null | grep ':1053' | while read line; do LOG "  netstat: $line"; done
+    exit 1
+fi
 
 # Start rogue DNS server
-dnsmasq --no-hosts --no-resolv --address=/#/${PORTAL_IP} --dns-forward-max=1 --cache-size=0 -p 1053 --listen-address=0.0.0.0,::1 --bind-interfaces &
+# -k (keep-in-foreground) prevents dnsmasq from daemonizing/forking so $! tracks the right PID
+LOG "  Starting dnsmasq on port 1053 (listen: 0.0.0.0, resolve all to $PORTAL_IP)..."
+dnsmasq -k --no-hosts --no-resolv --address=/#/${PORTAL_IP} --dns-forward-max=1 --cache-size=0 -p 1053 --listen-address=0.0.0.0 --bind-interfaces &
 DNS_PID=$!
 echo "$DNS_PID" > /tmp/goodportal-dns.pid
+sleep 1
 
-LOG green "SUCCESS: DNS hijacking active (PID: $DNS_PID)"
+# Verify dnsmasq process is still alive after startup
+if kill -0 $DNS_PID 2>/dev/null; then
+    LOG green "SUCCESS: DNS hijacking active (PID: $DNS_PID)"
+else
+    LOG red "ERROR: dnsmasq (PID: $DNS_PID) exited immediately after start"
+    LOG red "  Possible causes: port 1053 already in use, or bind failure"
+    # Show what's on port 1053 for diagnostics
+    netstat -plant 2>/dev/null | grep ':1053' | while read line; do LOG "  netstat: $line"; done
+    # Check dnsmasq stderr in syslog
+    logread 2>/dev/null | grep dnsmasq | tail -5 | while read line; do LOG "  syslog: $line"; done
+    exit 1
+fi
 
 LOG "Enabling IP forwarding..."
 echo 1 > /proc/sys/net/ipv4/ip_forward
@@ -700,6 +752,15 @@ fi
 LOG "Verifying DNS hijacking..."
 if ! netstat -plant 2>/dev/null | grep -q ':1053'; then
     LOG red "ERROR: DNS hijack not listening on port 1053"
+    # Show dnsmasq PID file and process status for diagnostics
+    if [ -f /tmp/goodportal-dns.pid ]; then
+        SAVED_PID=$(cat /tmp/goodportal-dns.pid)
+        LOG "  Saved PID: $SAVED_PID, alive: $(kill -0 $SAVED_PID 2>/dev/null && echo yes || echo no)"
+    fi
+    LOG "  All dnsmasq processes:"
+    ps w 2>/dev/null | grep dnsmasq | grep -v grep | while read line; do LOG "    $line"; done
+    LOG "  All listeners on 1053:"
+    netstat -plant 2>/dev/null | grep ':1053' | while read line; do LOG "    $line"; done
     exit 1
 fi
 
@@ -744,25 +805,34 @@ LOG "Forcing captive portal re-detection..."
 
 sleep 2
 
-# Reset TCP state without breaking DNS
+# Restart firewall to refresh DNAT rules and reset client TCP state
+LOG "  Restarting firewall..."
 /etc/init.d/firewall restart
 
-# Restart GoodPortal DNS hijack ONLY (do NOT touch system dnsmasq)
+# Restart system dnsmasq (port 53) to:
+#   1. Flush cached real DNS results that bypass our hijacking
+#   2. Trigger DHCP re-negotiation with connected clients
+#   3. Force phones to re-query DNS through our DNAT -> rogue dnsmasq on 1053
+# This is what triggers phones to re-check captive portal detection URLs.
+# Our rogue dnsmasq on port 1053 is a separate process and is NOT affected.
+LOG "  Restarting system dnsmasq (flush DNS cache, trigger DHCP re-negotiation)..."
+/etc/init.d/dnsmasq restart
+sleep 2
+
+# Verify rogue dnsmasq on 1053 is still alive after service restarts
 if [ -f /tmp/goodportal-dns.pid ]; then
-    kill "$(cat /tmp/goodportal-dns.pid)" 2>/dev/null
+    VERIFY_PID=$(cat /tmp/goodportal-dns.pid)
+    if kill -0 $VERIFY_PID 2>/dev/null; then
+        LOG green "SUCCESS: Captive portal re-detection triggered (rogue DNS PID: $VERIFY_PID still active)"
+    else
+        LOG red "ERROR: Rogue dnsmasq (PID: $VERIFY_PID) died during re-detection"
+        LOG "  Checking port 1053 status:"
+        netstat -plant 2>/dev/null | grep ':1053' | while read line; do LOG "    $line"; done
+        logread 2>/dev/null | grep dnsmasq | tail -5 | while read line; do LOG "  syslog: $line"; done
+    fi
+else
+    LOG red "ERROR: /tmp/goodportal-dns.pid not found"
 fi
-
-dnsmasq --no-hosts --no-resolv \
-    --address=/#/${PORTAL_IP} \
-    --dns-forward-max=1 \
-    --cache-size=0 \
-    -p 1053 \
-    --listen-address=0.0.0.0,::1 \
-    --bind-interfaces &
-
-echo $! > /tmp/goodportal-dns.pid
-
-LOG green "SUCCESS: Captive portal re-detection triggered"
 
 
 exit 0

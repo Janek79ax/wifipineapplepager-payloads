@@ -46,6 +46,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['email'])) {
         if ($currentWhitelist === false || strpos($currentWhitelist, $clientIP) === false) {
             @file_put_contents(WHITELIST_FILE, $clientIP . "\n", FILE_APPEND | LOCK_EX);
         }
+
+        // Apply firewall bypass rules synchronously (eliminates race condition with async whitelist_monitor)
+        // Without this, iOS Captive Network Assistant re-checks connectivity before whitelist_monitor
+        // applies rules (~1s poll), sees portal is still active, and shows "cannot open page" error.
+        // Safe: $clientIP already validated by regex above (digits and dots only)
+        @exec("nft insert rule inet fw4 dstnat_lan ip saddr " . $clientIP . " tcp dport 53 counter accept 2>/dev/null");
+        @exec("nft insert rule inet fw4 dstnat_lan ip saddr " . $clientIP . " udp dport 53 counter accept 2>/dev/null");
+        @exec("nft insert rule inet fw4 dstnat_lan ip saddr " . $clientIP . " tcp dport 80 counter accept 2>/dev/null");
+        @exec("nft insert rule inet fw4 dstnat_lan ip saddr " . $clientIP . " tcp dport 443 counter accept 2>/dev/null");
+        @exec("nft insert rule inet fw4 forward_lan ip saddr " . $clientIP . " counter accept 2>/dev/null");
     }
 
     // Validate and prepare target URL
@@ -54,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['email'])) {
     }
 
     // Send HTML page with progress indicator and auto-retry
-    // Handles the delay while whitelist monitor processes MAC and applies firewall rules
+    // nft rules are already applied above, so iOS CNA connectivity re-check will pass immediately
     header('Content-Type: text/html; charset=utf-8');
     echo '<!DOCTYPE html>
 <html>
@@ -62,6 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['email'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Authenticating...</title>
+    <meta http-equiv="refresh" content="8;url=' . htmlspecialchars($target, ENT_QUOTES, 'UTF-8') . '">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; color: white; }
@@ -146,6 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['email'])) {
         // Start connection attempts after brief delay
         setTimeout(tryConnect, 1000);
     </script>
+    <noscript><p style="text-align:center;margin-top:20px;"><a href="' . htmlspecialchars($target, ENT_QUOTES, 'UTF-8') . '" style="color:white;">Click here to continue</a></p></noscript>
 </body>
 </html>';
     exit;

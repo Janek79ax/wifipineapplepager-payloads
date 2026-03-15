@@ -356,7 +356,7 @@ class Settings:
 		except:
 			try:
 				NetworkCard = subprocess.check_output(["ip", "address", "show"])
-			except subprocess.CalledProcessError as ex:
+			except Exception as ex:
 				NetworkCard = "Error fetching Network Interfaces:", ex
 				pass
 		try:
@@ -371,7 +371,7 @@ class Settings:
 		except:
 			try:
 				RoutingInfo = subprocess.check_output(["ip", "route", "show"])
-			except subprocess.CalledProcessError as ex:
+			except Exception as ex:
 				RoutingInfo = "Error fetching Routing information:", ex
 				pass
 

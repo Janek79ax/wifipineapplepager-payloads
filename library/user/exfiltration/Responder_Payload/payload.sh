@@ -12,6 +12,8 @@ LOOTDIR="/root/loot/responder"
 SESSION_DIR="$LOOTDIR/session_$(date +%Y%m%d_%H%M%S)"
 INTERFACE="wlan0cli"
 
+export PATH="/usr/sbin:/sbin:/usr/bin:/bin:$PATH"
+
 ############################
 # Setup directories
 ############################

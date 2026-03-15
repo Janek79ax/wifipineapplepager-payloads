@@ -67,3 +67,14 @@ spencershepard (GRIMM) - message me on the Hak5 Discord!
   - Added installation option for pre-built Evil Portals collection (github.com/kleo/evilportals)
   - Redirect page after credential capture now waits for internet access instead of fixed delay (with fake progress bar)
   - Whitelist now uses IP addresses instead of MAC addresses
+- 1.3
+  - Fixed captive portal auto-detection race condition on WiFi Pineapple Pager
+  - Improved Android captive portal reliability (prevents ERR_SSL_PROTOCOL_ERROR)
+  - Restart GoodPortal DNS hijack safely without affecting system dnsmasq
+  - Replaced deprecated ALERT_RINGTONE with ALERT in whitelist monitor
+- 1.4
+  - Fixed dnsmasq daemonization causing false PID tracking (added -k flag)
+  - Fixed IPv6 loopback bind failure (removed ::1 from listen-address)
+  - Fixed captive portal not auto-triggering on phones: restart system dnsmasq to flush DNS cache and trigger DHCP re-negotiation
+  - Improved port 1053 cleanup with retry loop before dnsmasq start
+  - Added diagnostic logging throughout (nginx, firewall, dnsmasq, syslog)
