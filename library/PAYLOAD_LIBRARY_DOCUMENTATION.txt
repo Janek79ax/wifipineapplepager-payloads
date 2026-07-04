@@ -1,0 +1,1117 @@
+WiFi Pineapple Pager Payload Library Documentation
+
+This document describes every payload currently present under the library directory.
+For each payload, it explains what it does, how it works at a high level, and when to use it.
+Descriptions are based on payload headers, bundled README files, and the behavior visible in payload.sh.
+
+Total payloads documented: 172
+
+Section overview:
+- Alerts / deauth_flood_detected: 1
+- Alerts / handshake_captured: 4
+- Alerts / pineapple_auth_captured: 1
+- Alerts / pineapple_client_connected: 2
+- Recon / access_point: 7
+- Recon / client: 2
+- User / evil_portal: 7
+- User / examples: 12
+- User / exfiltration: 10
+- User / games: 8
+- User / general: 66
+- User / interception: 7
+- User / known_unstable: 1
+- User / prank: 3
+- User / reconnaissance: 26
+- User / remote_access: 13
+- User / virtual_pager: 2
+
+Alerts / deauth_flood_detected
+------------------------------
+Name: Example Deauth Flood Alert
+Path: library/alerts/deauth_flood_detected/example
+What it does: Alert human readable summary.
+How it works: It consumes Pager alert environment variables and turns the event into a notification or an automated follow-on action.
+When to use it: Use it when you want the Pager to respond automatically to this specific event.
+
+
+Alerts / handshake_captured
+---------------------------
+Name: Deduplicate Handshakes
+Path: library/alerts/handshake_captured/deduplicate
+What it does: Updated alerting on handshake capture, will check for duplicate handshakes for the AP MAC, and is currently set to drop the duplicate handshakes & associated PCAP's to keep things clean.
+How it works: It compares the new capture against existing loot, suppresses duplicates, and only keeps artifacts that add new value. It relies mainly on packet captures.
+When to use it: Use it when repeated captures or alerts create noise and you want to keep the loot set clean.
+
+Name: Example Handshake Capture Alert
+Path: library/alerts/handshake_captured/example
+What it does: Alert human readable summary.
+How it works: It consumes Pager alert environment variables and turns the event into a notification or an automated follow-on action. It relies mainly on offline cracking workflows.
+When to use it: Use it when you want the Pager to respond automatically to this specific event.
+
+Name: Hashtopolis Handshake Upload
+Path: library/alerts/handshake_captured/hashtopolis-autocrack
+What it does: Automatically uploads captured handshakes to Hashtopolis server via API.
+How it works: It reads the alert metadata, packages the captured material, and pushes it into an external cracking or processing workflow. It relies mainly on HTTP API calls or uploads, packet captures, and offline cracking workflows.
+When to use it: Use it when you want an alert event to trigger off-device processing or an automated post-capture workflow.
+
+Name: SSID Handshake Capture Alert
+Path: library/alerts/handshake_captured/handshake-ssid
+What it does: Alert human readable summary plus SSID.
+How it works: It enriches the standard alert by extracting additional wireless context, such as the SSID, before presenting the notification. It relies mainly on packet captures and offline cracking workflows.
+When to use it: Use it when you want the Pager to respond automatically to this specific event.
+
+
+Alerts / pineapple_auth_captured
+--------------------------------
+Name: Example Auth Captured Alert
+Path: library/alerts/pineapple_auth_captured/example
+What it does: Alert human readable summary.
+How it works: It consumes Pager alert environment variables and turns the event into a notification or an automated follow-on action. It relies mainly on Pineapple-specific control commands.
+When to use it: Use it when you want the Pager to respond automatically to this specific event.
+
+
+Alerts / pineapple_client_connected
+-----------------------------------
+Name: Device Profiler
+Path: library/alerts/pineapple_client_connected/device_profiler
+What it does: Profile connected devices via OUI lookup, detect randomized MACs, track unique clients with CSV/JSON logging.
+How it works: It consumes Pager alert environment variables and turns the event into a notification or an automated follow-on action.
+When to use it: Use it when you want each matching client event to automatically add identification context.
+
+Name: Example Client Connected Alert
+Path: library/alerts/pineapple_client_connected/example
+What it does: Alert human readable summary.
+How it works: It enriches the standard alert by extracting additional wireless context, such as the SSID, before presenting the notification. It relies mainly on Pineapple-specific control commands.
+When to use it: Use it when you want the Pager to respond automatically to this specific event.
+
+
+Recon / access_point
+--------------------
+Name: Connect to 2.4GHz AP
+Path: library/recon/access_point/Connect-To-AP
+What it does: Connect to selected 2.4GHz access point via Recon with SSID and password memory.
+How it works: It pulls the selected target details from Recon, writes the new wireless settings into OpenWrt configuration, and reloads WiFi to apply the change. It relies mainly on OpenWrt configuration changes and reachability tests.
+When to use it: Use it after selecting an access point in Recon when you want to inspect, connect to, clone, or act on that AP.
+
+Name: Connect_Host_Discovery
+Path: library/recon/access_point/Connect_Host_Discovery
+What it does: Recon Connect connects the Pager to a selected wireless access point in client mode , validates network assignment, and performs lightweight host discovery on the connected subnet using Nmap (-sn).
+How it works: It reads the selected target context, gathers nearby device or network details, and presents the result through the Pager interface. It relies mainly on nmap network scans.
+When to use it: Use it after selecting an access point in Recon when you want to inspect, connect to, clone, or act on that AP.
+
+Name: EXAMINE
+Path: library/recon/access_point/EXAMINE
+What it does: Set the pager to monitor a target AP channel or BSSID. Options for manual entry and reset to default.
+How it works: It reads the selected target context, gathers nearby device or network details, and presents the result through the Pager interface. It relies mainly on Pineapple-specific control commands.
+When to use it: Use it after selecting an access point in Recon when you want to inspect, connect to, clone, or act on that AP.
+
+Name: Quick Clone Pro
+Path: library/recon/access_point/Quick-Clone-Pro
+What it does: Clone AP with SSID + MAC, persistent Open AP configuration.
+How it works: It pulls the selected target details from Recon, writes the new wireless settings into OpenWrt configuration, and reloads WiFi to apply the change. It relies mainly on OpenWrt configuration changes, wireless service reloads, and Pineapple-specific control commands.
+When to use it: Use it after selecting an access point in Recon when you want to inspect, connect to, clone, or act on that AP.
+
+Name: Recon Device Hunter
+Path: library/recon/access_point/device-hunter-recon
+What it does: Auto-hunt a selected AP from Recon and display SSID.
+How it works: It uses the currently selected Recon target variables provided by the Pager and applies its action directly to that target. It relies mainly on PineAP recon data and local database queries.
+When to use it: Use it after selecting an access point in Recon when you want to inspect, connect to, clone, or act on that AP.
+
+Name: Targeted AP Example
+Path: library/recon/access_point/example
+What it does: Simple example logging selected AP info to payload log.
+How it works: It uses the currently selected Recon target variables provided by the Pager and applies its action directly to that target.
+When to use it: Use it after selecting an access point in Recon when you want to inspect, connect to, clone, or act on that AP.
+
+Name: Targeted AP HackStats
+Path: library/recon/access_point/AP-HackStats
+What it does: Get handshake and pcap stats for selected AP.
+How it works: It reads the selected target context, gathers nearby device or network details, and presents the result through the Pager interface.
+When to use it: Use it after selecting an access point in Recon when you want to inspect, connect to, clone, or act on that AP.
+
+
+Recon / client
+--------------
+Name: Client HackStats
+Path: library/recon/client/Client-HackStats
+What it does: Get handshake and pcap stats for selected client.
+How it works: It reads the selected target context, gathers nearby device or network details, and presents the result through the Pager interface.
+When to use it: Use it after selecting a client in Recon when you want to inspect or act on that specific device.
+
+Name: Targeted Client Example
+Path: library/recon/client/example
+What it does: Simple example logging selected AP info to payload log.
+How it works: It uses the currently selected Recon target variables provided by the Pager and applies its action directly to that target.
+When to use it: Use it after selecting a client in Recon when you want to inspect or act on that specific device.
+
+
+User / evil_portal
+------------------
+Name: default portal
+Path: library/user/evil_portal/default_portal
+What it does: Deactivates current portal and activates the Default captive portal.
+How it works: It changes local portal files or service state on the Pager so captive-portal content can be installed, enabled, started, stopped, or restored. It relies mainly on HTTP API calls or uploads and local web serving.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: disable evil portal
+Path: library/user/evil_portal/disable_evil_portal
+What it does: Disables the Evil Portal service.
+How it works: It changes local portal files or service state on the Pager so captive-portal content can be installed, enabled, started, stopped, or restored.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: enable evil portal
+Path: library/user/evil_portal/enable_evil_portal
+What it does: Enables the Evil Portal service.
+How it works: It changes local portal files or service state on the Pager so captive-portal content can be installed, enabled, started, stopped, or restored.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: install evil portal
+Path: library/user/evil_portal/install_evil_portal
+What it does: Complete Evil Portal installation for WiFi Pineapple Pager (OpenWrt 24.10.1).
+How it works: It changes local portal files or service state on the Pager so captive-portal content can be installed, enabled, started, stopped, or restored. It relies mainly on HTTP API calls or uploads, package installation, OpenWrt configuration changes, and local web serving.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: restart evil portal
+Path: library/user/evil_portal/restart_evil_portal
+What it does: Restarts the Evil Portal service.
+How it works: It changes local portal files or service state on the Pager so captive-portal content can be installed, enabled, started, stopped, or restored.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: start evil portal
+Path: library/user/evil_portal/start_evil_portal
+What it does: Starts the Evil Portal service.
+How it works: It changes local portal files or service state on the Pager so captive-portal content can be installed, enabled, started, stopped, or restored.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: stop evil portal
+Path: library/user/evil_portal/stop_evil_portal
+What it does: Stops the Evil Portal service.
+How it works: It changes local portal files or service state on the Pager so captive-portal content can be installed, enabled, started, stopped, or restored.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+
+User / examples
+---------------
+Name: ALERT Example
+Path: library/user/examples/ALERT
+What it does: Example usage of the ALERT DuckyScript command.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it as a reference when learning DuckyScript UI primitives or testing Pager interface behavior.
+
+Name: CONFIRMATION_DIALOG Example
+Path: library/user/examples/CONFIRMATION_DIALOG
+What it does: Example usage of the CONFIRMATION_DIALOG DuckyScript command.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it as a reference when learning DuckyScript UI primitives or testing Pager interface behavior.
+
+Name: ERROR_DIALOG Example
+Path: library/user/examples/ERROR_DIALOG
+What it does: Example usage of the ERROR_DIALOG DuckyScript command.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it as a reference when learning DuckyScript UI primitives or testing Pager interface behavior.
+
+Name: IP_PICKER Example
+Path: library/user/examples/IP_PICKER
+What it does: Example usage of the IP_PICKER DuckyScript command.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it as a reference when learning DuckyScript UI primitives or testing Pager interface behavior.
+
+Name: LOG Example
+Path: library/user/examples/LOG
+What it does: Example usage of the LOG DuckyScript command.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it as a reference when learning DuckyScript UI primitives or testing Pager interface behavior.
+
+Name: MAC_PICKER Example
+Path: library/user/examples/MAC_PICKER
+What it does: Example usage of the MAC_PICKER DuckyScript command.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it as a reference when learning DuckyScript UI primitives or testing Pager interface behavior.
+
+Name: NUMBER_PICKER Example
+Path: library/user/examples/NUMBER_PICKER
+What it does: Example usage of the NUMBER_PICKER DuckyScript command.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it as a reference when learning DuckyScript UI primitives or testing Pager interface behavior.
+
+Name: PROMPT Example
+Path: library/user/examples/PROMPT
+What it does: Example usage of the PROMPT DuckyScript command.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it as a reference when learning DuckyScript UI primitives or testing Pager interface behavior.
+
+Name: SPINNER Example
+Path: library/user/examples/SPINNER
+What it does: Example usage of the SPINNER DuckyScript commands.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it as a reference when learning DuckyScript UI primitives or testing Pager interface behavior.
+
+Name: TEXT_PICKER Example
+Path: library/user/examples/TEXT_PICKER
+What it does: Example usage of the TEXT_PICKER DuckyScript command.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it as a reference when learning DuckyScript UI primitives or testing Pager interface behavior.
+
+Name: WAIT_FOR_BUTTON_PRESS Example
+Path: library/user/examples/WAIT_FOR_BUTTON_PRESS
+What it does: Example usage of the WAIT_FOR_BUTTON_PRESS DuckyScript command.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it as a reference when learning DuckyScript UI primitives or testing Pager interface behavior.
+
+Name: WAIT_FOR_INPUT Example
+Path: library/user/examples/WAIT_FOR_INPUT
+What it does: Example usage of the WAIT_FOR_INPUT DuckyScript command.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it as a reference when learning DuckyScript UI primitives or testing Pager interface behavior.
+
+
+User / exfiltration
+-------------------
+Name: Auto_HCX_Capture
+Path: library/user/exfiltration/auto_hcx_capture
+What it does: A tool for gathering a detailed baseline around you.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on PMKID capture and package installation.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Dropbox Exfiltration Uploader v3.0
+Path: library/user/exfiltration/dropbox_upload
+What it does: Upload collected data to Dropbox with OAuth2 authentication.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP API calls or uploads.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: DUMPY_REVERSE_DUCKY
+Path: library/user/exfiltration/DUMPY_REVERSE_DUCKY
+What it does: Counterintelligence & Mass Storage Exfiltration for the WiFi Pineapple Pager.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: FirewallSwitcher
+Path: library/user/exfiltration/FirewallSwitcher
+What it does: Toggles the firewall on and off for SSH/Virtual Pager access in Client Mode.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on SSH access.
+When to use it: Use it when you need managed remote access to the Pager or a controlled path back to another system.
+
+Name: Responder Payload for WiFi Pineapple
+Path: library/user/exfiltration/Responder_Payload
+What it does: Runs Responder with logging and a kill switch.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on package installation, helper scripts, and name-poisoning capture.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Start Full Dump PCAP Capture
+Path: library/user/exfiltration/pcaps/Start_Dump
+What it does: Starts full dump PCAP capture and saves the file location and PID for later stopping.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on packet captures.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Start Recon Dump PCAP Capture
+Path: library/user/exfiltration/pcaps/Start_Pcap
+What it does: Starts recon dump PCAP capture and saves the file location and PID for later stopping.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Stop Full Dump PCAP Capture
+Path: library/user/exfiltration/pcaps/Stop_Dump
+What it does: Stops full dump PCAP capture started by startDump.sh and reports the file location and size.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on packet captures.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Stop Recon Dump PCAP Capture
+Path: library/user/exfiltration/pcaps/Stop_Pcap
+What it does: Stops recon dump PCAP capture started by startDump.sh and reports the file location and size.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: WiGLE Toolkit
+Path: library/user/exfiltration/wigle-toolkit
+What it does: Login, logout and upload loot to WiGLE.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on WiGLE exports.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+
+User / games
+------------
+Name: 1988
+Path: library/user/games/1988
+What it does: Persistent background listener that will trigger an easter egg link, lights, and sound when the OG code is entered.
+How it works: It implements a self-contained interactive loop on the Pager display using button input, text output, and local game state.
+When to use it: Use it when you want a self-contained interactive demo or a non-operational distraction on the device.
+
+Name: Little Labyrinth
+Path: library/user/games/little-labyrinth
+What it does: Hak5 based text adventure.
+How it works: It implements a self-contained interactive loop on the Pager display using button input, text output, and local game state.
+When to use it: Use it when you want a self-contained interactive demo or a non-operational distraction on the device.
+
+Name: night of the glitch
+Path: library/user/games/night-of-the-glitch
+What it does: Night of the Glitch is a narrative-driven horror text adventure designed specifically for the Hak5 WiFi Pineapple Pager .
+How it works: It implements a self-contained interactive loop on the Pager display using button input, text output, and local game state.
+When to use it: Use it when you want a self-contained interactive demo or a non-operational distraction on the device.
+
+Name: Number Guesser
+Path: library/user/games/number_guesser
+What it does: Pager-safe number guessing game with 5 tries and cheat mode.
+How it works: It implements a self-contained interactive loop on the Pager display using button input, text output, and local game state.
+When to use it: Use it when you want a self-contained interactive demo or a non-operational distraction on the device.
+
+Name: Puzzle Squirrel
+Path: library/user/games/Puzzle_Squirrel
+What it does: Shows links to my GitHub Pages CTFs.
+How it works: It implements a self-contained interactive loop on the Pager display using button input, text output, and local game state.
+When to use it: Use it when you want a self-contained interactive demo or a non-operational distraction on the device.
+
+Name: Simon Says
+Path: library/user/games/simon_says
+What it does: Memory game with lights and sounds!
+How it works: It implements a self-contained interactive loop on the Pager display using button input, text output, and local game state.
+When to use it: Use it when you want a self-contained interactive demo or a non-operational distraction on the device.
+
+Name: Snow Crash Terminal
+Path: library/user/games/text_adventure_llm
+What it does: AI-generated cyberpunk text adventure inspired by Snow Crash.
+How it works: It implements a self-contained interactive loop on the Pager display using button input, text output, and local game state.
+When to use it: Use it when you want a self-contained interactive demo or a non-operational distraction on the device.
+Requirements: ANTHROPIC_API_KEY (via .env file or environment variable), jq
+
+Name: WAR GAMES: LEGACY — The Inheritance Protocol
+Path: library/user/games/war_games
+What it does: A text adventure set in December 2025 where you play as James Lightman.
+How it works: It implements a self-contained interactive loop on the Pager display using button input, text output, and local game state.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+
+User / general
+--------------
+Name: Add SSID File
+Path: library/user/general/AddSSIDFile
+What it does: Adds SSIDs in a designated file to the SSID Pool. List must be located in /root/loot/pools/.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on Pineapple-specific control commands.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: ARP Table
+Path: library/user/general/arp
+What it does: Lists the ARP table and logs the results.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on ARP inspection.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: BT Pager Warden
+Path: library/user/general/BT_Pager_Warden
+What it does: Detects specific BT devices and alerts via Screen & LED. Giving you a fair warning so you can steer clear of a person if you want.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on Bluetooth scanning.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: Client Access Manager
+Path: library/user/general/client-access-manager
+What it does: Toggles SSH and Web UI access on the Client WiFi interface.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on SSH access and OpenWrt configuration changes.
+When to use it: Use it when you need managed remote access to the Pager or a controlled path back to another system.
+
+Name: Client WiFi Picker
+Path: library/user/general/switch_client_wifi
+What it does: Switches client mode WiFi between a selection of saved networks.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Client Wifi Picker Configuration
+Path: library/user/general/switch_client_wifi_configuration
+What it does: Configure saved client WiFi profiles.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Comprehensive Device Data
+Path: library/user/general/Comprehensive_Device_Data
+What it does: Full system, network, radios, USB, hardware, and connectivity status.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on Bluetooth scanning.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Display Image on WiFi Pager
+Path: library/user/general/display_image
+What it does: Display RGB565 image.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: DNS Lookup (nslookup)
+Path: library/user/general/nslookup
+What it does: Performs DNS lookups using nslookup and logs the results.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on DNS lookups.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: External MediaTek Loader
+Path: library/user/general/external-mediatek-radio-loader
+What it does: A simple, robust payload for seamlessly managing external MediaTek USB Wi-Fi adapters on the WiFi Pineapple.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on OpenWrt configuration changes and wireless service reloads.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: Favorites Manager
+Path: library/user/general/favoritesmanager
+What it does: Add, remove, or update payloads in the favorites folder.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Full Pull Payload PR
+Path: library/user/general/FullPullPRUpload
+What it does: Downloads and overwrites payloads from a specific GitHub Pull Request.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP API calls or uploads, HTTP downloads, and package installation.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Google Voice Alerts
+Path: library/user/general/gv_alerts
+What it does: Receive Google Voice calls/texts/voicemails as alerts.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP API calls or uploads.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: GPS Checker
+Path: library/user/general/gps-checker
+What it does: Checks if GPS data is flowing.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on GPS data.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: HackStats
+Path: library/user/general/HackStats
+What it does: DESCRIPTION Get stats on handshake & pcap captures.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it during authorized wireless assessments when you need to collect traffic or credential material for later analysis.
+
+Name: handshake 2 usb
+Path: library/user/general/handshake_2_usb
+What it does: This file can be edited to also do the loot directory etc.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it during authorized wireless assessments when you need to collect traffic or credential material for later analysis.
+
+Name: Handshake Sanitiser
+Path: library/user/general/handshake_sanitiser
+What it does: Advanced loot management with Full vs Partial quality control.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it during authorized wireless assessments when you need to collect traffic or credential material for later analysis.
+
+Name: Hashtopolis Handshake Upload
+Path: library/user/general/hashtopolis_manual_upload
+What it does: Manually uploads all captured handshakes to Hashtopolis server via API.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP API calls or uploads, packet captures, and offline cracking workflows.
+When to use it: Use it during authorized wireless assessments when you need to collect traffic or credential material for later analysis.
+
+Name: ICMP Alert
+Path: library/user/general/ICMP_ALERT
+What it does: Alert the wifi pineapple pager of ping or traceroute then Disabling incoming ICMP/UDP for 60 seconds.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on packet captures and reachability tests.
+When to use it: Use it during authorized wireless assessments when you need to collect traffic or credential material for later analysis.
+
+Name: IRC Chat
+Path: library/user/general/irc_chat
+What it does: Chat via IRC.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on reachability tests.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: keyboard test
+Path: library/user/general/AKeyBoardTest
+What it does: A simple tool to bring up all the keyboards for testing.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: LED's_Timeout
+Path: library/user/general/LEDs_Timeout
+What it does: Auto-disable LED when screen dims/turns off to save battery.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on OpenWrt configuration changes.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Log Viewer
+Path: library/user/general/log_viewer
+What it does: Log Viewer is a high-performance log analysis tool for the WiFi Pineapple Pager.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on nmap network scans.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: LTE Configure
+Path: library/user/general/lte_configure
+What it does: Configure the Hak5 eLiTE Mobile Broadband Adapter.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on package installation, OpenWrt configuration changes, and reachability tests.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: MAC Spoofer
+Path: library/user/general/MAC_spoofer
+What it does: MAC Spoofer for blending with specific environments.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: mobile2gps
+Path: library/user/general/mobile2gps
+What it does: Use your mobile phone as the Pager's GPS.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP downloads and GPS data.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: MTR (My Traceroute)
+Path: library/user/general/mtr
+What it does: Performs a network diagnostic using mtr to a target IP address or hostname and logs the results.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on package installation and path diagnostics.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Netstat
+Path: library/user/general/netstat
+What it does: Lists network connections and listening ports using netstat and logs the results.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Network Status Diagnostic
+Path: library/user/general/network_status
+What it does: Displays network connectivity status for all interfaces.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on reachability tests.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: NotifyMe
+Path: library/user/general/NotifyMe
+What it does: A small application, letting the user get notified at a defined timestamp.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: opkg Backup
+Path: library/user/general/opkg_backup
+What it does: Backs up user-installed packages to a file that survives firmware updates.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on package installation.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: opkg Restore
+Path: library/user/general/opkg_restore
+What it does: Reinstalls user-installed packages from backup after firmware update.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on package installation.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Package Installer
+Path: library/user/general/Package_Installer
+What it does: Install packages by entering package name.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on nmap network scans, package installation, helper scripts, and reachability tests.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Pager Alarm Clock
+Path: library/user/general/Pager_Alarm_Clock
+What it does: A simple alarm clock that runs in the background and displays the time in the format YYYY-MM-DD HH:MM AM/PM.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: PagerBoy Controller
+Path: library/user/general/PagerBoy
+What it does: Switches the Pager web interface to the PagerBoy theme and lets you restore the stock UI later.
+How it works: It swaps the Pager web UI files on disk, keeps a backup of the original interface, and lets the operator toggle between the stock and themed views.
+When to use it: Use it when you want the Pager browser UI to look less conspicuous or you prefer the themed control surface.
+
+Name: Payload Search
+Path: library/user/general/payload_search
+What it does: Search for payloads by name, title, description, or author. Browse and view payload details.
+How it works: It asks for user input, scans local payload or data sources, and prints matching results directly on the Pager.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Ping
+Path: library/user/general/ping
+What it does: Pings a target IP address or hostname and logs the results.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on reachability tests.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Pocket Term
+Path: library/user/general/Pocket_Terminal
+What it does: Pure custom command input.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: PORT Alert
+Path: library/user/general/PORT_ALERT
+What it does: Alert the wifi pineapple pager of a Port scan then Disabling all open ports for 60 seconds.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on packet captures.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: Pull Payload PR
+Path: library/user/general/PullPayloadPR
+What it does: Downloads and overwrites payloads from a specific GitHub Pull Request.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP API calls or uploads, HTTP downloads, and package installation.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Pull Ringtone PR
+Path: library/user/general/PullRingtonePR
+What it does: Downloads and overwrites ringtones from a specific GitHub Pull Request.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP API calls or uploads, HTTP downloads, and package installation.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Pull Theme PR
+Path: library/user/general/PullThemePR
+What it does: Downloads and overwrites themes from a specific GitHub Pull Request.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP API calls or uploads, HTTP downloads, and package installation.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Ringtone_tester
+Path: library/user/general/Ringtone_tester
+What it does: Perform a ringtone test by playing each ringtone individually.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Route
+Path: library/user/general/route
+What it does: Lists routing table information and logs the results.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on package installation.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Run Payloads In Terminal
+Path: library/user/general/run-in-terminal
+What it does: Installs run.sh and shim file so payloads can be executed in the terminal.
+How it works: It builds an interactive command workflow on the device so the operator can run or review system actions directly from the Pager UI.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: SetSSIDPool
+Path: library/user/general/SetSSIDPool
+What it does: Payload to reset your SSID pool to a set of APs that you want to reuse. For example you may have a set of SSIDs that you use in your home lab.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on Pineapple-specific control commands.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Skimmer Scanner
+Path: library/user/general/SkimmerScanner
+What it does: Detects potential credit card skimmers by identifying suspicious Bluetooth devices.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on Bluetooth scanning.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: SpeedTest
+Path: library/user/general/SpeedTest
+What it does: Performs an internet speed test and logs the results.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP API calls or uploads, HTTP downloads, package installation, and helper scripts.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: SpeedTest Config
+Path: library/user/general/SpeedTest_Config
+What it does: Configure SpeedTest payload settings.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Strip Connected Clients
+Path: library/user/general/StripConnectedClients
+What it does: Pulls previously connected clients from the recon database and stores that list in a file located in /root/loot/info.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on local database queries.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: Strip Open APs from Recon
+Path: library/user/general/StripOpenAP
+What it does: Strips open access points from the recon database and stores that list in a file located in /root/loot/pools.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on local database queries.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: TOGGLE A/B LEDS
+Path: library/user/general/toggle_ab_leds
+What it does: Toggle A and B button LEDS.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: toggle privacy mode
+Path: library/user/general/privacy-mode
+What it does: Enables and disables privacy mode by edit the degub.json.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Top Probed SSIDs
+Path: library/user/general/TopProbed
+What it does: Examines the recon.db file and pulls the top probed SSIDs ranking them in the process.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on local database queries.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: Traceroute
+Path: library/user/general/traceroute
+What it does: Performs a traceroute to a target IP address or hostname and logs the results.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Update Payloads
+Path: library/user/general/UpdatePayloads
+What it does: Downloads and syncs all payloads from github.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP downloads and package installation.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Update Ringtones
+Path: library/user/general/UpdateRingtones
+What it does: Downloads and syncs all ringtones from github.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP downloads and package installation.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Update Themes
+Path: library/user/general/UpdateThemes
+What it does: Downloads and syncs all themes from github.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on package installation.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: USB Mount + Transfer Loot
+Path: library/user/general/USB_Mount_Loot_Transfer
+What it does: Mounts a USB drive and optionally copies loot to it (no persistent system changes). To use ensure you confirm at dialog boxes with all capitols "YES".
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: USB Safe Unmount
+Path: library/user/general/USB_Unmount
+What it does: Flushes writes and safely unmounts /mnt/usb. To use run the payload and ensure you confirm at prompts with all capitols "YES".
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: USB Storage Mount (blkid)
+Path: library/user/general/usb-storage-mounting
+What it does: Detects, mounts, and unmounts USB storage devices.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: WAN Verifier
+Path: library/user/general/wan_verifier
+What it does: Verifies WAN IP and ISP to ensure anonymity. Alerts if on a known 'Baseline' IP.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP API calls or uploads and reachability tests.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Wardrive Activate
+Path: library/user/general/wardrive_activate
+What it does: Detects GPS devices, configures GPS, and starts Wigle.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on OpenWrt configuration changes, GPS data, and WiGLE exports.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Weather
+Path: library/user/general/Weather
+What it does: A simple weather app to check local or enter city name.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP API calls or uploads and reachability tests.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Whois
+Path: library/user/general/whois
+What it does: Queries whois information for a domain name or IP address and logs the results.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on package installation.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Windows Friendly Handshakes
+Path: library/user/general/WindowsFriendlyHandshakes
+What it does: Payload used to make Handshake files Windows friendly. Gets rid of colons from the filename.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it during authorized wireless assessments when you need to collect traffic or credential material for later analysis.
+
+
+User / interception
+-------------------
+Name: AntennaCheka
+Path: library/user/interception/AntennaCheka
+What it does: WiFi Pineapple Pager – Visual Antenna Benchmark Payload.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on packet captures.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: Burp Redirect
+Path: library/user/interception/burp_redirect
+What it does: Redirect client traffic to Burp Suite proxy (full or passive mode).
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on packet captures, OpenWrt configuration changes, helper scripts, and DNS lookups.
+When to use it: Use it when you are setting up user interaction, traffic interception, or captive-portal style workflows.
+
+Name: Burp Redirect Remove
+Path: library/user/interception/burp_redirect_remove
+What it does: Remove Burp Suite redirect and restore normal client traffic flow.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on OpenWrt configuration changes.
+When to use it: Use it during authorized wireless assessments when you need to collect traffic or credential material for later analysis.
+
+Name: FENRIS - Deauth Storm
+Path: library/user/interception/fenris
+What it does: Automated deauthentication attacks using PineAP recon data.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on PineAP recon data and Pineapple-specific control commands.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: goodportal Clear Whitelist
+Path: library/user/interception/goodportal_clear_whitelist
+What it does: Clear all whitelisted MAC addresses.
+How it works: It changes local portal files or service state on the Pager so captive-portal content can be installed, enabled, started, stopped, or restored.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: goodportal Configure
+Path: library/user/interception/goodportal_configure
+What it does: Configure and start captive portal on lan interfaces.
+How it works: It changes local portal files or service state on the Pager so captive-portal content can be installed, enabled, started, stopped, or restored. It relies mainly on HTTP API calls or uploads, package installation, OpenWrt configuration changes, and local web serving.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: goodportal Remove
+Path: library/user/interception/goodportal_remove
+What it does: Cleanup and remove goodportal configuration.
+How it works: It changes local portal files or service state on the Pager so captive-portal content can be installed, enabled, started, stopped, or restored. It relies mainly on OpenWrt configuration changes and local web serving.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+
+User / known_unstable
+---------------------
+Name: live_walk
+Path: library/user/known_unstable/live_walk
+What it does: A WiFi logger that records networks in detail as you walk or perform audits.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on package installation.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+
+User / prank
+------------
+Name: Paper Pusher
+Path: library/user/prank/Paper_Pusher
+What it does: Finds raw-print capable network printers on the local subnet and sends repeated print jobs to them.
+How it works: It verifies connectivity, derives the local subnet, scans for port 9100 printers, prompts for print content and page count, and streams raw jobs with netcat.
+When to use it: Use it for controlled demonstrations or awareness exercises that show how exposed printers can be abused.
+
+Name: Portal Pwn
+Path: library/user/prank/Portal_Pwn
+What it does: Portal Pwn is a Hak5 Wifi Pineapple Pager payload designed to distrupt malicious actors utilizing ESP32 Marauder Evil Portals (EP) for credential phishing campaigns.
+How it works: It changes local portal files or service state on the Pager so captive-portal content can be installed, enabled, started, stopped, or restored. It relies mainly on HTTP API calls or uploads.
+When to use it: Use it for controlled demonstrations or awareness exercises that show how exposed printers can be abused.
+
+Name: SSID Chaos Engine v1.0
+Path: library/user/prank/ssid_chaos
+What it does: SSID Chaos Engine is a themed SSID broadcast generator designed to weaponize curiosity, paranoia, humor, and confusion—purely at the name level.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on Pineapple-specific control commands.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+
+User / reconnaissance
+---------------------
+Name: Alien AP
+Path: library/user/reconnaissance/alien_ap
+What it does: This payload tries to identify APs that are sending beacons with wrong country code information.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on packet captures.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Blue Clues
+Path: library/user/reconnaissance/blue_clues
+What it does: Active Audit Tool.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: Curly - Web Recon & Vuln Scanner
+Path: library/user/reconnaissance/curly
+What it does: Curl-based web reconnaissance and vulnerability testing for pentesting and bug bounty hunting.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP API calls or uploads, SSH access, local web serving, and DNS lookups.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: Custom NMAP Scan
+Path: library/user/reconnaissance/nmap_custom
+What it does: Custom nmap scan with zenmap style, you choose the scan type.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on nmap network scans and reachability tests.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: Device Hunter
+Path: library/user/reconnaissance/device_hunter
+What it does: Track any device by signal strength.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on PineAP recon data.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: Ethernet Mod Nmap Recon Payload
+Path: library/user/reconnaissance/ethernet_mod
+What it does: Gateway + 5 Host Recon (Top 10 Ports) - Compatible with non GMO (Glitch Mod Only).
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on nmap network scans and DNS lookups.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: Find Hackers
+Path: library/user/reconnaissance/find_hackers
+What it does: Detects suspicious network and Bluetooth activity that may indicate the presence of nearby hackers.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on PineAP recon data, Bluetooth scanning, and local database queries.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: Flipper Detector
+Path: library/user/reconnaissance/flipper_detector
+What it does: Scans nearby Bluetooth devices for Flipper Zero hardware based on known vendor identifiers and alerts when one appears.
+How it works: It enables Bluetooth scanning, watches for devices whose MAC prefix matches known Flipper hardware, and raises an alert the first time each device is seen. It relies mainly on Bluetooth scanning.
+When to use it: Use it when you want a passive local warning for nearby Flipper devices during physical or RF monitoring.
+
+Name: Flock You - Color Key Refresh v9.15
+Path: library/user/reconnaissance/Flock_Detect
+What it does: Continuous BLE scanner for Flock Safety surveillance devices.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on Bluetooth scanning.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: Full Bluetooth Scan
+Path: library/user/reconnaissance/bluetooth
+What it does: One-shot full scan of Classic and BLE devices on Pineapple Pager.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on Bluetooth scanning.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: HATI - Moon Hunter
+Path: library/user/reconnaissance/hati
+What it does: Clientless WPA PMKID attack - the wolf that hunts in darkness.
+How it works: It captures association-related traffic, converts it into crackable hash material, and stores the results under the device loot directory. It relies mainly on PMKID capture, hash conversion for cracking, offline cracking workflows, and package installation.
+When to use it: Use it during authorized wireless assessments when you need to collect traffic or credential material for later analysis.
+Requirements: hcxdumptool, hcxpcapngtool (hcxtools)
+
+Name: HUGINN - WiFi/BLE Identity Correlator
+Path: library/user/reconnaissance/huginn
+What it does: Correlates WiFi probe requests with BLE advertisements to identify devices.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on packet captures and Bluetooth scanning.
+When to use it: Use it during authorized wireless assessments when you need to collect traffic or credential material for later analysis.
+
+Name: IP_SUBNETTER_GETTER
+Path: library/user/reconnaissance/IP_Subnetter_Getter
+What it does: Public IP, ARP discovery, CVE enumeration, detailed vulnerability scans, and risk level assessment.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on nmap network scans, HTTP API calls or uploads, reachability tests, and ARP inspection.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: Live Probe Monitor
+Path: library/user/reconnaissance/live_probe
+What it does: Probe request viewer.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP API calls or uploads and packet captures.
+When to use it: Use it during authorized wireless assessments when you need to collect traffic or credential material for later analysis.
+
+Name: NMap Host Discovery
+Path: library/user/reconnaissance/nmap_host_discovery
+What it does: Performs host discovery scan on selected subnet and saves results to both storage and log.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on nmap network scans and reachability tests.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: NMap Subnet
+Path: library/user/reconnaissance/nmap_subnet
+What it does: Dumps NMap scan data of selected subnet to both storage and log.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on nmap network scans.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: OSINT-U-Asked
+Path: library/user/reconnaissance/OSINT-U-Asked
+What it does: Lightweight OSINT payload for username recon, driven by a JSON file.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP API calls or uploads, package installation, reachability tests, and DNS lookups.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: ProbeHound
+Path: library/user/reconnaissance/probehound
+What it does: Searches for devices broadcasting probe requests for a specified SSID.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on packet captures and Pineapple-specific control commands.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: Query Shodan InternetDB
+Path: library/user/reconnaissance/query_shodan_internet_db
+What it does: Queries Shodan InternetDB API for information about an IP address or hostname.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP API calls or uploads and DNS lookups.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: RTL-SDR 433 Sniffer
+Path: library/user/reconnaissance/rtl_433
+What it does: Sniff 433 MHz sensors (weather stations, remotes) via RTL-SDR + rtl_433.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on package installation and reachability tests.
+When to use it: Use it when you need managed remote access to the Pager or a controlled path back to another system.
+
+Name: SMB Spy
+Path: library/user/reconnaissance/SMBspy
+What it does: Discovers SMB hosts using nmap and logs results with next-step suggestions.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on nmap network scans.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: The Nosey Neighbor
+Path: library/user/reconnaissance/nosey-neighbor
+What it does: Passive recon payload — discovers APs, collects probed SSIDs.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP API calls or uploads, packet captures, Pineapple-specific control commands, and GPS data.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: TRIG_MAC|WIRELESS TRIPWIRE
+Path: library/user/reconnaissance/TRIG_MAC_2.0
+What it does: While v1.2.0 focused on core radio stability, v2.2.0 transforms the Pager into a mobile wardriving and tracking hub with full GPS integration and refined operator feedback.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on packet captures, GPS data, and Bluetooth scanning.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: VERDANDI - Probe Fingerprint Engine
+Path: library/user/reconnaissance/verdandi
+What it does: Defeats MAC randomization by fingerprinting probe request IEs.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on packet captures.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: WiFi Guppy
+Path: library/user/reconnaissance/wifi_guppy
+What it does: Displays Wi-Fi channel usage and relative busyness.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: wpa_handshake_quality_check
+Path: library/user/reconnaissance/wpa_handshake_quality_check
+What it does: Fast WPA handshake quality analysis with duplicate detection.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on packet captures.
+When to use it: Use it during authorized wireless assessments when you need to collect traffic or credential material for later analysis.
+
+
+User / remote_access
+--------------------
+Name: HIDX Stealthlink
+Path: library/user/remote_access/hidx_stealthlink_client
+What it does: Starts the HIDX Stealthlink client service, which auto connects to O.MG devices configured with Stealthlink.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on SSH access, package installation, and helper scripts.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Nautilus
+Path: library/user/remote_access/nautilus
+What it does: Web-based payload launcher with live console output and GitHub integration.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on package installation and helper scripts.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Name: PageCord
+Path: library/user/remote_access/pagecord
+What it does: Control your poager through discord!
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP API calls or uploads.
+When to use it: Use it when its specific function matches the operator task you want to perform from the Pager.
+
+Name: Pager_keystrokes
+Path: library/user/remote_access/Pager_keystrokes
+What it does: Read previous and live keystrokes from your Keycroc.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on netcat sessions, SSH access, password-based SSH automation, and package installation.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Pager_quack
+Path: library/user/remote_access/Pager_quack
+What it does: Send QUACK command to your keycroc from wifi pineapple pager.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on netcat sessions, SSH access, password-based SSH automation, and package installation.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Reverse Shell
+Path: library/user/remote_access/Reverse_Shell
+What it does: Start SSH Reverse Shell.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on netcat sessions, SSH access, password-based SSH automation, and package installation.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Tailscale Configuration
+Path: library/user/remote_access/tailscale_configure
+What it does: Configure Tailscale after installation.
+How it works: It manages the local Tailscale client, updates its state or configuration, and uses the mesh network to expose the Pager remotely. It relies mainly on Tailscale networking.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Tailscale Connect
+Path: library/user/remote_access/tailscale_connect
+What it does: Connect to Tailscale network.
+How it works: It manages the local Tailscale client, updates its state or configuration, and uses the mesh network to expose the Pager remotely. It relies mainly on Tailscale networking.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Tailscale Disconnect
+Path: library/user/remote_access/tailscale_disconnect
+What it does: Disconnect from Tailscale network.
+How it works: It manages the local Tailscale client, updates its state or configuration, and uses the mesh network to expose the Pager remotely. It relies mainly on Tailscale networking.
+When to use it: Use it when you need managed remote access to the Pager or a controlled path back to another system.
+
+Name: Tailscale Installer
+Path: library/user/remote_access/tailscale_installer
+What it does: Install and configure Tailscale.
+How it works: It manages the local Tailscale client, updates its state or configuration, and uses the mesh network to expose the Pager remotely. It relies mainly on HTTP downloads, Tailscale networking, and SSH access.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Tailscale Status
+Path: library/user/remote_access/tailscale_status
+What it does: Show Tailscale connection status.
+How it works: It manages the local Tailscale client, updates its state or configuration, and uses the mesh network to expose the Pager remotely. It relies mainly on Tailscale networking.
+When to use it: Use it when you need managed remote access to the Pager or a controlled path back to another system.
+
+Name: Tailscale Uninstaller
+Path: library/user/remote_access/tailscale_uninstaller
+What it does: Remove Tailscale from device.
+How it works: It manages the local Tailscale client, updates its state or configuration, and uses the mesh network to expose the Pager remotely. It relies mainly on Tailscale networking.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Tunnel Rat
+Path: library/user/remote_access/Tunnel_Rat
+What it does: Built on WiFi Pineapple Pager firmware v1.0.6.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on HTTP API calls or uploads, SSH access, password-based SSH automation, and PineAP recon data.
+When to use it: Use it during authorized wireless assessments when you need to collect traffic or credential material for later analysis.
+
+
+User / virtual_pager
+--------------------
+Name: Pager Skinner
+Path: library/user/virtual_pager/pager_skinner
+What it does: Installs and switches between Virtual Pager UI skins.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on package installation.
+When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+
+Name: Virtual Pager Enhancer
+Path: library/user/virtual_pager/virtual_pager_enhancer
+What it does: Tool used to add functionality to the virtual pager.
+How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on package installation.
+When to use it: Use it during discovery or monitoring phases when you need to identify devices, networks, or exposures.
+
+Non-payload placeholders
+------------------------
+library/user/exfiltration/PLACEHOLDER
+library/user/general/PLACEHOLDER
+library/user/incident_response/
+These locations currently act as category placeholders and do not contain runnable payload.sh files.
