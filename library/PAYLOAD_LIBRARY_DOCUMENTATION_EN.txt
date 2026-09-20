@@ -1,0 +1,534 @@
+# WiFi Pineapple Pager Payload Library Documentation
+
+Repository: wifipineapplepager-payloads/library
+Platform: WiFi Pineapple Pager (OpenWrt 24.10.1, MIPS 24KEc)
+Total payloads documented: 172
+
+This is the merged English reference for the library. It keeps the newer full catalog as the source of truth, folds in the valuable technical notes from the older Polish analysis, and removes the bilingual duplication.
+
+How to read this file:
+- Each entry gives the payload path, its purpose, and any implementation detail worth preserving.
+- Simple helper payloads are grouped when they only wrap a service action or a small variation of the same workflow.
+- Counts below reflect the newer catalog, which is more complete than the legacy analysis.
+
+Section overview:
+- Alerts / deauth_flood_detected: 1
+- Alerts / handshake_captured: 4
+- Alerts / pineapple_auth_captured: 1
+- Alerts / pineapple_client_connected: 2
+- Recon / access_point: 7
+- Recon / client: 2
+- User / evil_portal: 7
+- User / examples: 12
+- User / exfiltration: 10
+- User / games: 8
+- User / general: 66
+- User / interception: 7
+- User / known_unstable: 1
+- User / prank: 3
+- User / reconnaissance: 26
+- User / remote_access: 13
+- User / virtual_pager: 2
+
+Repository overview:
+The library spans alert-driven automation, targeted recon, AP cloning, captive portals, exfiltration, Bluetooth and wireless discovery, tunnel and remote-access workflows, Virtual Pager customization, and a large set of operator utilities. Common implementation patterns include DuckyScript dialogs, OpenWrt UCI changes, PineAP integration, local database queries, packet capture tooling, HTTP APIs, and persistent service wrappers.
+
+Alerts
+------
+Automatically triggered by Pager/Pineapple events.
+
+- deauth_flood_detected/example
+  Minimal deauth flood alert example. Uses the standard alert variables and documents source MAC, destination MAC, AP MAC, and client MAC context.
+
+- handshake_captured/deduplicate
+  Deduplicates captured handshakes and related PCAP files for the same BSSID. Extracts SSID from beacon frames with tcpdump, normalizes MACs, and prunes repeated .22000/.pcap artifacts under /root/loot/handshakes.
+
+- handshake_captured/example
+  Minimal handshake alert example. Documents key alert fields such as PCAP path, hashcat path, capture type (EAPOL/PMKID), and crackable status.
+
+- handshake_captured/hashtopolis-autocrack
+  Full automated pipeline: captured handshake -> Hashtopolis upload -> distributed cracking task. Reads config from config.sh, validates server connectivity and API access, extracts SSID, checks for duplicates, base64-encodes the .22000 file, creates the hashlist, and launches the configured pretask. The legacy notes correctly highlight this as one of the most operationally complete workflows in the repo.
+
+- handshake_captured/handshake-ssid
+  Enhanced handshake alert that adds the SSID to the notification. Parses beacon frames and falls back cleanly when the SSID cannot be recovered.
+
+- pineapple_auth_captured/example
+  Example enterprise-auth alert for captures such as MSCHAPv2 or EAP-TTLS. Documents auth type, username, and challenge identity context.
+
+- pineapple_client_connected/example
+  Minimal client-connected alert example. Documents AP MAC, client MAC, SSID, and SSID length variables.
+
+- pineapple_client_connected/device_profiler
+  Device profiling pipeline for newly seen clients. Detects randomized MACs from the LAA bit, performs OUI lookup, classifies client type, tracks first-seen vs returning devices, and logs to CSV and JSON. The older analysis adds an important nuance: alerts can be loud for new clients and quiet for known ones.
+
+Recon / access_point
+--------------------
+Payloads launched from Recon after selecting an AP.
+
+- AP-HackStats
+  Quick handshake and PCAP statistics for the selected AP by matching the BSSID inside /root/loot/handshakes.
+
+- Connect-To-AP
+  Connects the Pager to a selected 2.4 GHz AP and remembers credentials. Validates band support, maps encryption to UCI values, stores profiles in /mmc/root/.wifi_remembered_aps, polls for interface readiness, and checks internet reachability. Legacy notes also capture its MetaPayload TARGET_SUBNET integration.
+
+- Connect_Host_Discovery
+  Connects to the selected AP in client mode, waits for a usable lease, computes the subnet, runs nmap host discovery, saves results to /root/loot/recon_connect_clientmode/, and disconnects when done.
+
+- EXAMINE
+  Locks monitoring to a selected or manually entered channel or BSSID, or resets monitoring to default. Uses PINEAPPLE_EXAMINE_CHANNEL, PINEAPPLE_EXAMINE_BSSID, and PINEAPPLE_EXAMINE_RESET.
+
+- Quick-Clone-Pro
+  Persistent AP clone workflow. Copies SSID and optionally MAC into the Open AP UCI config, reloads WiFi, optionally adds the target to the SSID pool, and keeps backup state so the operator can restore the original config. LED states are used to signal setup, attack, and completion.
+
+- device-hunter-recon
+  Auto-hunts the selected AP with real-time signal feedback. Falls back across Recon env vars, recon.db, and PineAP JSON, then drives LED, vibration, audio, and on-screen signal bars from monitored RSSI.
+
+- example
+  Reference template for AP Recon variables including OUI, BSSID, SSID, hidden flag, channel, encryption, client count, RSSI, timestamp, frequency, and packets.
+
+Recon / client
+--------------
+
+- Client-HackStats
+  Same idea as AP-HackStats, but keyed to the selected client MAC.
+
+- example
+  Reference template for selected client variables plus associated AP context.
+
+User / evil_portal
+------------------
+Captive portal lifecycle and deployment helpers.
+
+- install_evil_portal
+  Full Evil Portal installer. The legacy analysis is valuable here: it documents the isolated subnet option, package installation, PHP backend, captive portal detection endpoints, nftables redirection, dnsmasq wildcard DNS, whitelist daemon, IP forwarding, service enablement, and verification flow.
+
+- default_portal
+  Restores the default portal content, auto-detects the working bridge, relinks portal files, and restarts nginx.
+
+- enable_evil_portal / disable_evil_portal
+  Enable or disable Evil Portal at boot through /etc/init.d/evilportal.
+
+- start_evil_portal / stop_evil_portal / restart_evil_portal
+  Immediate service control helpers for the Evil Portal runtime.
+
+User / examples
+---------------
+DuckyScript UI reference payloads.
+
+- ALERT
+  Blocking alert dialog example.
+
+- CONFIRMATION_DIALOG
+  Yes/no dialog example returning DUCKYSCRIPT_USER_CONFIRMED or DUCKYSCRIPT_USER_DENIED.
+
+- ERROR_DIALOG
+  Error dialog example.
+
+- IP_PICKER
+  IP picker example with cancel/error handling.
+
+- LOG
+  Colored logging example.
+
+- MAC_PICKER
+  MAC picker example.
+
+- NUMBER_PICKER
+  Number picker example.
+
+- PROMPT
+  Blocking prompt example.
+
+- SPINNER
+  Loading spinner example using START_SPINNER and STOP_SPINNER.
+
+- TEXT_PICKER
+  Text picker example.
+
+- WAIT_FOR_BUTTON_PRESS
+  Wait for a specific button event.
+
+- WAIT_FOR_INPUT
+  Wait for any button event and return the button name.
+
+User / exfiltration
+-------------------
+Data export, capture, and off-device processing.
+
+- auto_hcx_capture
+  Automated PMKID/EAPOL capture using hcxdumptool and hcxtools. Captures to timestamped .pcapng files and loops on a timed schedule.
+
+- dropbox_upload
+  Full Dropbox exfiltration client with OAuth2, optional AES-256-CBC encryption, recursive upload support, and chunked uploads for large files.
+
+- DUMPY_REVERSE_DUCKY
+  Defensive USB triage workflow. Removes usbhid before insertion, detects suspicious HID behavior, mounts storage read-only, prioritizes sensitive file patterns, supports selective dumping, and restores normal USB HID behavior on exit.
+
+- FirewallSwitcher
+  Toggles the firewall state to temporarily allow client-mode SSH or Virtual Pager access without making the change persist across reboot.
+
+- Responder_Payload
+  Bundled Responder deployment for LLMNR/NBT-NS/mDNS poisoning and NTLM capture. Installs dependencies, launches with WPAD-oriented options, and stores sessions under /root/loot/responder/.
+
+- pcaps/Start_Dump, pcaps/Stop_Dump
+  Start and stop passive full packet capture sessions on selected active interfaces such as br-evil, br-lan, wlan0cli, or tcpdump any. This captures traffic to/from/through the Pineapple, not unrelated unicast traffic from another client on the same external WiFi. Records PID, output path, interface, capture size, and tcpdump packet/drop stats.
+
+- pcaps/Start_MITM_Dump, pcaps/Stop_MITM_Dump
+  Start and stop ARP MITM packet capture for all known non-gateway clients on the wlan0cli network, with manual IP fallback when a target is not listed in ip neigh. Enables forwarding, uses existing arpspoof or an arping fallback for bidirectional ARP poisoning, captures the forwarded traffic to PCAP, and can block forwarded UDP/443 for selected targets to force TCP TLS for Zeek ssl.log. May not work on APs with client isolation.
+
+- pcaps/Start_Pcap, pcaps/Stop_Pcap
+  Start and stop firmware-managed Recon-specific PCAP sessions through WIFI_PCAP_START/WIFI_PCAP_STOP.
+
+- wigle-toolkit
+  WiGLE login/logout/upload helper. The older notes add useful operator detail: it supports upload disposition choices such as delete, archive, or leave-in-place after processing saved CSV files.
+
+User / games
+------------
+Demonstrations, narrative payloads, and operator amusement.
+
+- 1988
+  Background Konami Code listener using raw button events, LEDs, audio, and an alert when the sequence is matched.
+
+- little-labyrinth
+  Large text adventure with rooms, item gating, a boss encounter, and D-pad driven state transitions.
+
+- night-of-the-glitch
+  Horror puzzle adventure with a minimap, multiple endings, and stylized terminal effects.
+
+- number_guesser
+  Small number guessing game with picker UI and cheat mode.
+
+- Puzzle_Squirrel
+  Launch point for external web-based puzzle and CTF-style content.
+
+- simon_says
+  LED and sound memory game with adaptive timing and persistent high score storage.
+
+- text_adventure_llm
+  AI-backed cyberpunk text adventure. Requires an Anthropic API key and generates structured branching outcomes through a JSON-based game state format.
+
+- war_games
+  Long-form interactive narrative with branching decisions, tracked allies, and multiple endings.
+
+User / general
+--------------
+General-purpose operational helpers and utilities.
+
+- AddSSIDFile
+  Bulk-load SSIDs from a file into the SSID pool.
+
+- AKeyBoardTest
+  Exercises the Pager picker UIs in sequence.
+
+- arp, route, netstat, nslookup, ping, traceroute, mtr, whois
+  Standard network diagnostics wrapped for Pager operation and loot logging.
+
+- BT_Pager_Warden
+  Bluetooth proximity alert for watched MAC addresses with scan loops and anti-spam behavior.
+
+- client-access-manager
+  Opens or closes client-mode access to SSH and the web UI by inserting firewall allow rules.
+
+- Comprehensive_Device_Data
+  Broad system inventory: firmware, CPU, battery, memory, storage, interfaces, radios, USB, ports, and DHCP state.
+
+- display_image
+  Writes a converted RGB565 LE image directly to /dev/fb0 for full-screen display.
+
+- external-mediatek-radio-loader
+  Detects supported MediaTek USB adapters, ranks usable endpoints, and provisions extra radios in UCI.
+
+- favoritesmanager
+  Adds, removes, and updates favorites by copying payloads across library categories.
+
+- FullPullPRUpload
+  Pull request installer with GitHub API queries, ZIP download, per-file review, and self-update protection.
+
+- gps-checker
+  Verifies GPS data flow and restarts gpsd if needed.
+
+- gv_alerts
+  Google Voice call/SMS/voicemail forwarding to Pager through a webhook and deduplicated polling workflow.
+
+- HackStats
+  General handshake and PCAP counter for loot review.
+
+- handshake_2_usb
+  Exports handshake files to mounted USB storage and normalizes filenames for compatibility.
+
+- handshake_sanitiser
+  Deduplicates handshakes, removes lower-quality duplicates when a full capture exists, and normalizes filenames for Windows use.
+
+- hashtopolis_manual_upload
+  Manual Hashtopolis upload flow with server validation, .22000 selection, SSID extraction, task creation, and optional cleanup after success.
+
+- ICMP_ALERT
+  Detects ping or traceroute behavior and temporarily inserts nftables drop rules before restoring the original state.
+
+- irc_chat
+  Minimal IRC client built with raw TCP and local button-driven interaction, with no heavy dependencies.
+
+- LEDs_Timeout
+  Persistent service that turns LEDs off when the screen dims and restores them when brightness returns.
+
+- log_viewer
+  Loot/log browser with interactive and headless modes plus lightweight syntax-style highlighting for common artifacts.
+
+- lte_configure
+  Configures the Hak5 eLiTE modem stack and associated UCI settings.
+
+- MAC_spoofer
+  Spoofs MAC addresses using profile-oriented OUI choices and randomized suffixes.
+
+- mobile2gps
+  Uses a phone browser as a GPS source by bridging Geolocation API data into gpsd through a local HTTPS service.
+
+- network_status
+  Fast interface and connectivity health check across available network devices.
+
+- NotifyMe, Pager_Alarm_Clock
+  Time-based reminder and alarm helpers with audio prompts and user confirmation.
+
+- opkg_backup, opkg_restore, Package_Installer
+  Package management helpers for backup, restore, and interactive installation.
+
+- PagerBoy
+  Swaps the stock web UI for a themed GameBoy-inspired interface and allows later restoration.
+
+- payload_search
+  Local payload metadata search by title, author, or description.
+
+- Pocket_Terminal
+  Free-form command input from the Pager UI with optional logging.
+
+- PORT_ALERT
+  Detects likely port scanning from SYN bursts, briefly locks down open ports, then restores the prior firewall state.
+
+- privacy-mode
+  Toggles censored display behavior in Recon by editing the debug config and restarting the Pager service.
+
+- PullPayloadPR, PullRingtonePR, PullThemePR
+  Focused GitHub PR installers for payloads, ringtones, and themes.
+
+- ringtone_tester
+  Iterates installed RTTTL files and plays them for verification.
+
+- run-in-terminal
+  Installs a shim so payloads can run in an SSH terminal while mapping DuckyScript UI primitives to terminal equivalents.
+
+- SetSSIDPool
+  Replaces the SSID pool with a predefined list.
+
+- SkimmerScanner
+  Bluetooth skimmer detector with multi-factor scoring, risk levels, alerts, vibration, and an extensible signature database.
+
+- SpeedTest, SpeedTest_Config
+  Internet speed testing plus a companion settings payload for metadata collection behavior.
+
+- StripConnectedClients, StripOpenAP, TopProbed
+  recon.db extractors for client history, open APs, and top probed SSIDs.
+
+- switch_client_wifi, switch_client_wifi_configuration
+  Save and switch client-mode WiFi profiles.
+
+- toggle_ab_leds
+  Toggles the A and B button LEDs.
+
+- UpdatePayloads, UpdateRingtones, UpdateThemes
+  Sync helpers for refreshing local assets from GitHub.
+
+- USB_Mount_Loot_Transfer, USB_Unmount, usb-storage-mounting
+  USB storage detection, mounting, safe unmounting, and loot transfer helpers.
+
+- wan_verifier
+  Checks current WAN IP and ISP against a saved baseline for anonymity verification.
+
+- wardrive_activate
+  One-step GPS and WiGLE startup workflow.
+
+- Weather
+  Weather lookup with auto-detected or manually entered location.
+
+- WindowsFriendlyHandshakes
+  Renames handshake files to avoid colon-related problems on Windows.
+
+User / interception
+-------------------
+Traffic interception, disruption, and portal control.
+
+- AntennaCheka
+  Benchmarks internal and USB antennas by capturing on multiple monitor interfaces and comparing RSSI.
+
+- burp_redirect
+  Redirects client traffic to Burp Suite in active or passive proxy mode.
+
+- burp_redirect_remove
+  Removes the Burp redirect rules and restores normal traffic flow.
+
+- fenris
+  Deauthentication payload from the FENRIR suite. Supports targeted or storm-style loops using Pineapple deauth controls.
+
+- goodportal_configure
+  Full captive portal deployment on LAN interfaces with nginx, PHP-FPM, DNS hijacking, NAT redirection, credential logging, and whitelist management.
+
+- goodportal_clear_whitelist
+  Clears previously whitelisted clients so they must reauthenticate.
+
+- goodportal_remove
+  Cleans up goodportal state and restores normal DNS, firewall, and IPv6 behavior.
+
+User / known_unstable
+---------------------
+
+- live_walk
+  Continuous WiFi logging workflow based on monitor mode capture. Useful, but explicitly marked unstable.
+
+User / prank
+------------
+
+- Paper_Pusher
+  Finds raw-print capable printers on the local subnet and sends repeated print jobs.
+
+- Portal_Pwn
+  Targets hostile or test ESP32 Marauder Evil Portals by joining them and spamming or crashing their input paths.
+
+- ssid_chaos
+  Themed SSID broadcast generator for curiosity, confusion, and awareness demonstrations.
+
+User / reconnaissance
+---------------------
+Broader discovery, intelligence gathering, and tracking workflows.
+
+- alien_ap
+  Detects APs advertising inconsistent country code information from beacon contents.
+
+- blue_clues
+  Bluetooth audit tool with vendor lookup, Class-of-Device decoding, and service discovery.
+
+- bluetooth
+  Full Bluetooth scan across classic and BLE devices.
+
+- curly
+  Large curl-based web recon and vulnerability scanner with many endpoint classes, bug bounty-oriented checks, and optional webhook integration.
+
+- device_hunter
+  Hot/cold target tracking based on real-time signal strength.
+
+- ethernet_mod
+  Quick Ethernet-side host and port discovery for compatible USB Ethernet workflows.
+
+- find_hackers
+  Looks for signatures associated with known offensive devices, rogue AP behavior, and suspicious Bluetooth activity.
+
+- flipper_detector
+  BLE-based Flipper Zero detector.
+
+- Flock_Detect
+  BLE scanner for Flock Safety devices.
+
+- hati
+  Clientless PMKID capture flow from the FENRIR suite using hcxdumptool and conversion to .22000 output.
+
+- huginn
+  Cross-radio identity correlator that links WiFi probe behavior and BLE advertisements to defeat MAC randomization.
+
+- IP_Subnetter_Getter
+  Multi-step public and local network recon, including subnet inspection, scans, and risk-oriented output.
+
+- live_probe
+  Live probe request monitor with optional Discord/webhook style reporting.
+
+- nmap_custom, nmap_host_discovery, nmap_subnet
+  Interactive Nmap wrappers for custom scans, host discovery, and subnet scans.
+
+- nosey-neighbor
+  Large passive wireless recon workflow combining GPS, channel hopping, beacon/probe collection, pcap capture, vendor enrichment, density scoring, and reporting.
+
+- OSINT-U-Asked
+  Username OSINT checker built from a bundled site profile dataset.
+
+- probehound
+  Targeted sniffer for devices probing for a chosen SSID.
+
+- query_shodan_internet_db
+  Shodan InternetDB lookup without an API key.
+
+- rtl_433
+  433 MHz signal capture for compatible RTL-SDR workflows.
+
+- SMBspy
+  SMB share discovery helper.
+
+- TRIG_MAC|WIRELESS_TRIPWIRE
+  Wireless tripwire with optional GPS tagging and cooldown-based alerting for watched targets.
+
+- verdandi
+  Advanced anti-randomization engine using probe-request information element fingerprinting plus RSSI differentiation.
+
+- wifi_guppy
+  Visual channel occupancy and busyness display.
+
+- wpa_handshake_quality_check
+  Offline handshake quality analyzer that sorts captures into valid, partial, and invalid buckets.
+
+User / remote_access
+--------------------
+Remote shells, tunnels, web control surfaces, and external device integration.
+
+- Pager_keystrokes
+  Reads keystrokes from a Hak5 Key Croc over SSH and streams the live log.
+
+- Pager_quack
+  Sends DuckyScript or QUACK commands from the Pager to a Key Croc.
+
+- Reverse_Shell
+  Builds a reverse SSH tunnel to a remote host and manages tunnel lifecycle.
+
+- Tunnel_Rat
+  End-to-end offensive chain: target selection, recon, deauth and capture, cracking handoff, client-mode join, public IP reporting, remote reachability check, and reverse SSH tunnel establishment.
+
+- hidx_stealthlink_client
+  Remote shell bridge for air-gapped targets through an O.MG cable and a Pager-hosted listener.
+
+- nautilus
+  Browser-based payload launcher and control plane with console streaming, ttyd shell access, Virtual Pager integration, GitHub PR browsing, and a proxy for Pineapple APIs.
+
+- pagecord
+  Discord-controlled remote management bot for commands, uploads, downloads, payload execution, and DuckyScript dispatch.
+
+- tailscale_installer, tailscale_configure, tailscale_connect, tailscale_disconnect, tailscale_status, tailscale_uninstaller
+  Full Tailscale lifecycle for installation, auth, connection, status inspection, disconnection, and removal.
+
+User / virtual_pager
+--------------------
+
+- pager_skinner
+  Virtual Pager skin manager that swaps packaged UI image sets.
+
+- virtual_pager_enhancer
+  Client-side enhancement layer for Virtual Pager, adding loot browsing, downloads, skins, background changes, system info, payload updating, and custom button imagery.
+
+Key techniques represented in the library
+-----------------------------------------
+
+- WPA handshake capture and cracking: hati, auto_hcx_capture, Tunnel_Rat, hashtopolis-autocrack, hashtopolis_manual_upload.
+- MAC randomization defeat: verdandi, huginn, device_profiler.
+- Captive portal and Evil Twin operations: install_evil_portal, goodportal_configure, Quick-Clone-Pro.
+- Credential harvesting: Evil Portal, goodportal, Responder.
+- Network reconnaissance: Nmap helpers, nosey-neighbor, curly, ethernet_mod.
+- Data exfiltration and loot handling: dropbox_upload, handshake_2_usb, USB_Mount_Loot_Transfer.
+- Reverse access and C2: Tunnel_Rat, Reverse_Shell, Tailscale suite, nautilus, pagecord.
+- Bluetooth recon: blue_clues, SkimmerScanner, find_hackers, flipper_detector, BT_Pager_Warden.
+- Signal tracking: device_hunter, device-hunter-recon.
+- DNS hijack / man-in-the-middle patterns: Evil Portal, burp_redirect, goodportal_configure.
+- Anti-BadUSB safeguards: DUMPY_REVERSE_DUCKY.
+- GPS and wardriving integration: wardrive_activate, wigle-toolkit, mobile2gps, nosey-neighbor.
+- Framebuffer and physical UI control: display_image, simon_says, 1988, device-hunter-recon.
+- AI/LLM integration: text_adventure_llm.
+
+Non-payload placeholders
+------------------------
+
+- user/exfiltration/PLACEHOLDER
+- user/general/PLACEHOLDER
+- user/incident_response/PLACEHOLDER or empty category scaffolding

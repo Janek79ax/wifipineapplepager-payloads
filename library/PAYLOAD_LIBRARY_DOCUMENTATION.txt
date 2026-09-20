@@ -1,3 +1,4 @@
+Pager docs (new)
 WiFi Pineapple Pager Payload Library Documentation
 
 This document describes every payload currently present under the library directory.
@@ -299,27 +300,39 @@ When to use it: Use it when its specific function matches the operator task you 
 
 Name: Start Full Dump PCAP Capture
 Path: library/user/exfiltration/pcaps/Start_Dump
-What it does: Starts full dump PCAP capture and saves the file location and PID for later stopping.
-How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on packet captures.
-When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
-
-Name: Start Recon Dump PCAP Capture
-Path: library/user/exfiltration/pcaps/Start_Pcap
-What it does: Starts recon dump PCAP capture and saves the file location and PID for later stopping.
-How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
-When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+What it does: Starts full dump PCAP capture on a selected active interface and saves the file location, PID, interface, and tcpdump log for later stopping.
+How it works: It offers active capture points such as br-evil, br-lan, wlan0cli, and tcpdump's any interface, then runs tcpdump with full snaplen and packet-flush diagnostics. It warns that passive capture cannot see another client's unicast traffic on the same external WiFi unless that traffic already passes through the Pineapple.
+When to use it: Use it when you want a Wireshark-ready dump from an existing MITM/bridge path, a Pineapple AP client path, or the Pineapple client uplink.
 
 Name: Stop Full Dump PCAP Capture
 Path: library/user/exfiltration/pcaps/Stop_Dump
-What it does: Stops full dump PCAP capture started by startDump.sh and reports the file location and size.
-How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device. It relies mainly on packet captures.
-When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+What it does: Stops full dump PCAP capture started by Start_Dump and reports the interface, file location, size, and tcpdump packet/drop stats.
+How it works: It reads the saved PID/path/interface state, signals tcpdump to close the PCAP cleanly, copies the tcpdump log beside the PCAP, and removes temporary state.
+When to use it: Use it after Start Full Dump PCAP Capture to finish and summarize the saved capture.
+
+Name: Start MITM Dump PCAP Capture
+Path: library/user/exfiltration/pcaps/Start_MITM_Dump
+What it does: Starts ARP MITM against all known clients on the wlan0cli network and captures the forwarded traffic to a PCAP.
+How it works: It requires wlan0cli with an IP and default gateway, collects non-gateway targets from ip neigh, defaults to spoofing all listed clients, and allows manual IP fallback when the target is not listed. It enables ip_forward and captures with tcpdump. For ARP poisoning it uses arpspoof if already installed, otherwise falls back to repeated arping probes and can offer iputils-arping installation. Optional Zeek HTTPS mode blocks forwarded UDP/443 for selected targets so browsers fall back from QUIC/HTTP3 to TCP TLS and Zeek can produce ssl.log.
+When to use it: Use it when target devices are other clients on the same external WiFi/L2 network and their traffic does not naturally pass through the Pineapple. It may not work if the AP enforces client isolation.
+
+Name: Stop MITM Dump PCAP Capture
+Path: library/user/exfiltration/pcaps/Stop_MITM_Dump
+What it does: Stops MITM dump capture, removes temporary QUIC/forwarding rules, restores the previous ip_forward value, and reports the PCAP path and tcpdump stats.
+How it works: It reads /tmp/pcap_mitm.* state, stops tcpdump and all ARP poisoning loops/processes, removes temporary nft/iptables rules for all targets, copies logs beside the PCAP, and removes temporary state.
+When to use it: Use it after Start MITM Dump PCAP Capture to stop poisoning cleanly and preserve the capture.
+
+Name: Start Recon Dump PCAP Capture
+Path: library/user/exfiltration/pcaps/Start_Pcap
+What it does: Starts Recon-specific PCAP capture through the Pager WIFI_PCAP_START helper.
+How it works: It delegates capture setup to the firmware/helper stack and reports the returned capture path.
+When to use it: Use it during Recon workflows where the firmware-managed monitor capture is the right source.
 
 Name: Stop Recon Dump PCAP Capture
 Path: library/user/exfiltration/pcaps/Stop_Pcap
-What it does: Stops recon dump PCAP capture started by startDump.sh and reports the file location and size.
-How it works: It combines Pager dialogs with local shell commands to automate the task directly on the device.
-When to use it: Use it when you need to change service state or prepare another workflow before running more advanced payloads.
+What it does: Stops Recon-specific PCAP capture started by Start_Pcap.
+How it works: It delegates capture shutdown to the Pager WIFI_PCAP_STOP helper.
+When to use it: Use it after Start Recon Dump PCAP Capture.
 
 Name: WiGLE Toolkit
 Path: library/user/exfiltration/wigle-toolkit
@@ -1115,3 +1128,737 @@ library/user/exfiltration/PLACEHOLDER
 library/user/general/PLACEHOLDER
 library/user/incident_response/
 These locations currently act as category placeholders and do not contain runnable payload.sh files.
+
+
+Pager docs (old)
+
+----------------
+# WiFi Pineapple Pager — Pełna Analiza Payloadów
+
+> **Repozytorium:** `wifipineapplepager-payloads-master/library`  
+> **Platforma:** WiFi Pineapple Pager (OpenWrt 24.10.1, MIPS 24KEc)  
+> **Data analizy:** 4 marca 2026  
+> **Łączna liczba payloadów:** ~105
+
+---
+
+## Spis treści
+
+1. [Alerts (8 payloadów)](#1-alerts)
+2. [Recon — Access Point (7)](#2-recon--access-point)
+3. [Recon — Client (2)](#3-recon--client)
+4. [User — Evil Portal (7)](#4-user--evil-portal)
+5. [User — Examples (12)](#5-user--examples)
+6. [User — Exfiltration (6)](#6-user--exfiltration)
+7. [User — Games (8)](#7-user--games)
+8. [User — General (50)](#8-user--general)
+9. [User — Interception (5)](#9-user--interception)
+10. [User — Known Unstable (1)](#10-user--known-unstable)
+11. [User — Prank (3)](#11-user--prank)
+12. [User — Reconnaissance (24)](#12-user--reconnaissance)
+13. [User — Remote Access (13)](#13-user--remote-access)
+14. [User — Virtual Pager (2)](#14-user--virtual-pager)
+15. [Incident Response (0)](#15-user--incident-response)
+
+---
+
+## 1. Alerts
+
+Payloady uruchamiane automatycznie przez eventy systemowe Pineapple (deauth, handshake, auth, client connect).
+
+### 1.1 deauth_flood_detected/example
+| | |
+|---|---|
+| **Autor** | Hak5Darren |
+| **Cel** | Minimalny przykład — wyświetla alert o wykrytym deauth flood |
+| **Metoda** | Wywołuje `ALERT "$_ALERT_DENIAL_MESSAGE"`. Dokumentuje 6 zmiennych środowiskowych (source MAC, destination MAC, AP MAC, client MAC). |
+
+### 1.2 handshake_captured/example
+| | |
+|---|---|
+| **Autor** | Hak5Darren |
+| **Cel** | Minimalny przykład — wyświetla podsumowanie przechwycenia handshake'a |
+| **Metoda** | `ALERT "$_ALERT_HANDSHAKE_SUMMARY"`. Dokumentuje 8 zmiennych (PCAP path, hashcat path, typ EAPOL/PMKID, crackable flag). |
+
+### 1.3 handshake_captured/deduplicate
+| | |
+|---|---|
+| **Autor** | Unit981 |
+| **Cel** | Automatyczne usuwanie zduplikowanych handshake'ów |
+| **Metoda** | Wyciąga SSID z PCAP przez `tcpdump` (parsuje ramki Beacon). Normalizuje MAC do uppercase. Zlicza pliki `.22000`/`.pcap` pasujące do BSSID w `/root/loot/handshakes/`. Jeśli >1, usuwa duplikaty via `rm -rf`. |
+
+### 1.4 handshake_captured/handshake-ssid
+| | |
+|---|---|
+| **Autor** | RootJunky |
+| **Cel** | Wzbogacony alert z nazwą sieci SSID (domyślny alert pokazuje tylko MAC) |
+| **Metoda** | Parsowanie ramek Beacon przez `tcpdump` + `sed`. Fallback do `UNKNOWN_SSID`. Wyświetla `"SSID: $SSID | $_ALERT_HANDSHAKE_SUMMARY"`. |
+
+### 1.5 handshake_captured/hashtopolis-autocrack
+| | |
+|---|---|
+| **Autor** | Huntz + PanicAcid |
+| **Cel** | Pełna automatyczna pipeline: handshake → upload do Hashtopolis → tworzenie rozproszonego zadania łamania GPU |
+| **Metoda** | (1) Ładuje konfigurację z `config.sh` (URL, API key, pretask ID, cracker version). (2) Test połączenia z serwerem via `curl` POST → Hashtopolis API `test/connection`. (3) Walidacja API key → `test/access`. (4) Ekstrakcja SSID z PCAP (tcpdump). (5) Check duplikatów na serwerze → `hashlist/listHashlists` z case-insensitive grep BSSID. (6) Base64-encode pliku `.22000`. (7) Upload hashlist → `hashlist/createHashlist` (hash type 22000, brain settings). (8) Tworzenie zadania → `task/runPretask`. Obsługa błędów na każdym etapie z `ERROR_DIALOG`. |
+| **Pliki** | `payload.sh` (220 linii), `config.sh` (80 linii), `README.md` (332 linie) |
+
+### 1.6 pineapple_auth_captured/example
+| | |
+|---|---|
+| **Autor** | Hak5Darren |
+| **Cel** | Przykład alertu o przechwyceniu enterprise auth (MSCHAPv2, EAP-TTLS) |
+| **Metoda** | `ALERT "$_ALERT_AUTH_SUMMARY"`. Zmienne: typ auth, username, challenge identity. |
+
+### 1.7 pineapple_client_connected/example
+| | |
+|---|---|
+| **Autor** | Hak5Darren |
+| **Cel** | Przykład alertu o podłączeniu klienta |
+| **Metoda** | `ALERT "$_ALERT_CLIENT_CONNECTED_SUMMARY"`. Zmienne: AP MAC, client MAC, SSID, długość SSID. |
+
+### 1.8 pineapple_client_connected/device_profiler
+| | |
+|---|---|
+| **Autor** | z3r0l1nk |
+| **Cel** | Pełny system profilowania urządzeń — vendor OUI, wykrywanie zrandomizowanych MAC, klasyfikacja typów, tracking unique/returning klientów |
+| **Metoda** | (1) Wykrywanie randomizacji MAC (bit LAA w pierwszym oktecie). (2) Hardcoded OUI lookup tabbel (25+ vendorów: Apple, Samsung, Google, Intel, Cisco, Raspberry Pi, Espressif...). (3) Klasyfikacja urządzeń (VM, iPhone, PC, IoT, Network Equipment...) z emoji tagami. (4) Śledzenie nowych vs powracających klientów via `seen_clients.txt`. (5) Dual-format logowanie: CSV + JSON array. (6) Smart alerting — nowi klienci = głośny alert, powracający = cichy (konfigurowalny QUIET_MODE). |
+| **Pliki** | `payload.sh` (260 linii) |
+
+---
+
+## 2. Recon — Access Point
+
+Payloady uruchamiane z menu Recon po wybraniu sieci WiFi (Access Point).
+
+### 2.1 AP-HackStats
+| | |
+|---|---|
+| **Autor** | Unit981 |
+| **Cel** | Szybkie statystyki handshake'ów/pcapów dla wybranego AP |
+| **Metoda** | Szuka plików `.22000` i `.pcap` w `/root/loot/handshakes/` pasujących do BSSID. Wyświetla zliczenie via `ALERT`. |
+
+### 2.2 Connect-To-AP
+| | |
+|---|---|
+| **Autor** | spencershepard (GRIMM) |
+| **Cel** | Połączenie Pagera z wybranym AP 2.4GHz z zapamiętywaniem haseł |
+| **Metoda** | (1) Wykrywanie ukrytych SSID (`$_RECON_SELECTED_AP_HIDDEN`). (2) Walidacja pasma (odrzuca 5GHz — `wlan0cli` obsługuje tylko 2.4GHz). (3) Mapowanie szyfrowania → UCI values (psk2, sae, open). (4) Przechowywanie credentials w `/mmc/root/.wifi_remembered_aps` (format: `SSID|ENC|PASSWORD|BSSID`). (5) `WIFI_CONNECT wlan0cli` → polling `ifconfig` (20 x 5s). (6) Test internetu `ping 1.1.1.1`. (7) Integracja z MetaPayload `TARGET_SUBNET`. |
+
+### 2.3 Connect_Host_Discovery
+| | |
+|---|---|
+| **Autor** | Stuffy24 |
+| **Cel** | Połączenie z wybranym AP + Nmap host discovery na podsieci |
+| **Metoda** | Autoryzacja → `WIFI_CONNECT` client mode → oczekiwanie na IP (60s, ignoruje `172.16.52.x`) → obliczanie podsieci CIDR → `nmap -sn -n -S <client_ip> --reason <cidr>` → wyniki do `/root/loot/recon_connect_clientmode/` → `WIFI_DISCONNECT`. |
+
+### 2.4 EXAMINE
+| | |
+|---|---|
+| **Autor** | Septumus |
+| **Cel** | Kontrola monitoringu Pagera — zablokuj na kanale lub BSSID |
+| **Metoda** | Menu via D-pad: GREEN=reset, UP=lock channel (wybranego AP), RIGHT=lock channel (ręczny), DOWN=lock BSSID (wybranego AP), LEFT=lock BSSID (ręczny). Używa `PINEAPPLE_EXAMINE_CHANNEL`, `PINEAPPLE_EXAMINE_BSSID`, `PINEAPPLE_EXAMINE_RESET`. Opcjonalny timer. |
+
+### 2.5 Quick-Clone-Pro
+| | |
+|---|---|
+| **Autor** | Aitema-GmbH |
+| **Cel** | Klonowanie AP (Evil Twin) — SSID + MAC do persistentnej konfiguracji Open AP |
+| **Metoda** | (1) UCI persistent config: `uci set wireless.wlan0open.ssid/macaddr/disabled` + `uci commit wireless` + `wifi reload`. (2) 3-stopniowe dialog: klonuj SSID? → klonuj MAC? → dodaj do SSID Pool? (3) Backup/restore oryginalnej konfiguracji (`/tmp/quickclone_backup_*`). (4) LED states: SETUP=magenta, ATTACK=żółty, FINISH=zielony. Przeżywa restart urządzenia. |
+
+### 2.6 device-hunter-recon
+| | |
+|---|---|
+| **Autor** | RocketGod + Notorious Squirrel |
+| **Cel** | Auto-hunt wybranego AP z real-time feedbackiem siły sygnału |
+| **Metoda** | (1) Target acquisition z 3 fallbackami (env vars → SQLite `recon.db` → `_pineap RECON APS` JSON). (2) Signal monitoring: `_pineap MONITOR <mac> any rate=200 timeout=3600`. (3) LED 4-level indicator (<-75dBm=1 niebieski, -75 do -55=2 cyan, -55 do -35=3 żółty, >-35=4 czerwony + wibracja). (4) Audio: RTTTL ringtony skalowane do siły sygnału. (5) ASCII signal bar. (6) Button exit via `/dev/input/event0`. |
+
+### 2.7 example (AP)
+| | |
+|---|---|
+| **Autor** | Korben |
+| **Cel** | Szablon reference dokumentujący wszystkie zmienne env AP Recon |
+| **Metoda** | Loguje: OUI, BSSID, SSID, Hidden, Channel, Encryption, Client Count, RSSI, Timestamp, Freq, Packets. |
+
+---
+
+## 3. Recon — Client
+
+### 3.1 Client-HackStats
+| | |
+|---|---|
+| **Autor** | Unit981 |
+| **Cel** | Statystyki handshake'ów/pcapów dla wybranego klienta |
+| **Metoda** | Jak AP-HackStats, ale szuka po `$_RECON_SELECTED_CLIENT_MAC_ADDRESS`. |
+
+### 3.2 example (Client)
+| | |
+|---|---|
+| **Autor** | Korben |
+| **Cel** | Szablon reference — wszystkie zmienne klienta + AP |
+| **Metoda** | Loguje: Client OUI/MAC/SSID/BSSID/Packets/Channel/Encryption/RSSI/Timestamp/Freq + pełny kontekst AP. |
+
+---
+
+## 4. User — Evil Portal
+
+Kompletna implementacja captive portalu do przechwytywania credentials.
+
+### 4.1 install_evil_portal
+| | |
+|---|---|
+| **Autor** | PentestPlaybook |
+| **Cel** | Pełna automatyczna instalacja Evil Portal z wszystkimi zależnościami |
+| **Metoda** | 10-etapowy installer (930 linii): (0) Izolowany subnet prompt (`br-evil` bridge, `10.0.0.0/24`, oddzielna strefa firewall). (1) Instalacja pakietów (php8, php8-fpm, sqlite3, nginx-full). (2) PHP API backend (routing, autoryzacja klientów, logowanie credentials). (3) Portal HTML z detekcją SSID/hostname/MAC klienta via DHCP/SQLite. (4) Nginx config z captive portal detection endpoints (Android `generate_204`, iOS `hotspot-detect.html`, Windows `ncsi.txt`/`connecttest.txt`). (5) Uprawnienia. (6) Init script: nftables DNAT (port 80→portal, port 53→5353), DNS spoofing via dnsmasq wildcard, IPv6 disable, whitelist daemon (polling `/tmp/EVILPORTAL_CLIENTS.txt` co 0.5s, wstawianie nftables accept rules). (7) IP forwarding. (8-10) Start + boot enable + weryfikacja. |
+
+### 4.2 default_portal
+| | |
+|---|---|
+| **Autor** | PentestPlaybook |
+| **Cel** | Przywrócenie Default portalu po zmianie na custom |
+| **Metoda** | Auto-detect IP (br-evil/br-lan), symlinki z `/root/portals/Default/` do `/www/`, restart nginx. |
+
+### 4.3 enable_evil_portal
+| | |
+|---|---|
+| **Cel** | Włączenie Evil Portal na starcie systemu |
+| **Metoda** | `/etc/init.d/evilportal enable` |
+
+### 4.4 disable_evil_portal
+| | |
+|---|---|
+| **Cel** | Wyłączenie Evil Portal z autostartu |
+| **Metoda** | `/etc/init.d/evilportal disable` |
+
+### 4.5 start_evil_portal
+| | |
+|---|---|
+| **Cel** | Natychmiastowe uruchomienie Evil Portal |
+| **Metoda** | `/etc/init.d/evilportal start` |
+
+### 4.6 stop_evil_portal
+| | |
+|---|---|
+| **Cel** | Natychmiastowe zatrzymanie Evil Portal |
+| **Metoda** | `/etc/init.d/evilportal stop` |
+
+### 4.7 restart_evil_portal
+| | |
+|---|---|
+| **Cel** | Restart Evil Portal (przywraca default portal) |
+| **Metoda** | `/etc/init.d/evilportal restart` |
+
+---
+
+## 5. User — Examples
+
+Przykłady demonstracyjne poleceń DuckyScript UI. Autor: **Korben**, v1.0.
+
+| Payload | Cel | Metoda |
+|---|---|---|
+| **ALERT** | Wyświetlanie alertu | `ALERT "text"` — blokujący dialog |
+| **CONFIRMATION_DIALOG** | Dialog tak/nie | Zwraca `$DUCKYSCRIPT_USER_CONFIRMED` / `$DUCKYSCRIPT_USER_DENIED` |
+| **ERROR_DIALOG** | Dialog błędu | `ERROR_DIALOG "text"` — czerwona stylizacja |
+| **IP_PICKER** | Picker adresu IP | `IP_PICKER "prompt" "default"` z obsługą cancel/error |
+| **LOG** | Kolorowe logowanie | `LOG red/green/blue "text"` |
+| **MAC_PICKER** | Picker adresu MAC | `MAC_PICKER "prompt" "DE:AD:BE:EF:CA:FE"` |
+| **NUMBER_PICKER** | Picker liczbowy | `NUMBER_PICKER "prompt" default_number` |
+| **PROMPT** | Blokujący prompt | `PROMPT "text"` — czeka na dowolny przycisk |
+| **SPINNER** | Loading indicator | `id=$(START_SPINNER "msg")` / `STOP_SPINNER $id` |
+| **TEXT_PICKER** | Picker tekstowy | `TEXT_PICKER "prompt" "default"` |
+| **WAIT_FOR_BUTTON_PRESS** | Czekanie na konkretny przycisk | `WAIT_FOR_BUTTON_PRESS UP` |
+| **WAIT_FOR_INPUT** | Czekanie na dowolny przycisk | Zwraca nazwę przycisku na stdout |
+
+---
+
+## 6. User — Exfiltration
+
+Payloady do ekstrakcji i eksfiltracji danych.
+
+### 6.1 auto_hcx_capture
+| | |
+|---|---|
+| **Autor** | MusicalVR |
+| **Cel** | Automatyczny capture PMKID/EAPOL handshake'ów przez hcxdumptool |
+| **Metoda** | Auto-instalacja `hcxdumptool`/`hcxtools`. Capture na `wlan1mon` do timestampowanych `.pcapng` w `/root/loot/handshakes/`. 10-minutowy timed loop (60s cykli). Graceful termination via `SIGINT`. |
+
+### 6.2 dropbox_upload
+| | |
+|---|---|
+| **Autor** | macr0hack422 |
+| **Cel** | Pełny klient eksfiltracji Dropbox z OAuth2, szyfrowaniem AES-256 i chunked upload |
+| **Metoda** | (875 linii) (1) OAuth2 auth system (save/load/refresh tokens, authorization code exchange). (2) Opcjonalne szyfrowanie AES-256-CBC via `openssl` (PBKDF2, 100k iteracji). (3) Simple upload (<150MB) = `POST /2/files/upload`. (4) Chunked upload (>150MB) = session start → append chunks po 10MB → session finish. (5) Rekurencyjna ekstrakcja katalogów. (6) GUI menu via `NUMBER_PICKER`. |
+
+### 6.3 DUMPY_REVERSE_DUCKY
+| | |
+|---|---|
+| **Autor** | THENRGLABS |
+| **Cel** | "Reverse Rubber Ducky" — bezpieczne przeszukiwanie USB z detekcją BadUSB/HID |
+| **Metoda** | (1) Self-healing (auto-strip `\r`, non-breaking spaces). (2) **HID lockout** — `rmmod usbhid` PRZED włożeniem USB. (3) USB detection via polling `/sys/bus/usb/devices/`. (4) **Double-lock HID detection** — sprawdza `/proc/bus/input/devices` + `bInterfaceClass=03` → jeśli HID: "FOWL PLAY DETECTED" + wieczna blokada. (5) Mount read-only + index plików. (6) Priorytetyzacja high-value plików (regex: `wallet|kdbx|key|secret|bank|login|credential|config|pass|shadow`). (7) Interaktywny browser (D-pad: UP/DOWN=scroll, B=tag, A=commit). (8) Selective/full dump do tar archive w `/root/loot/DUMP_USB/`. (9) EXIT trap = restore `usbhid`. |
+
+### 6.4 FirewallSwitcher
+| | |
+|---|---|
+| **Autor** | r3dfish |
+| **Cel** | Toggle firewall on/off (umożliwia SSH/Virtual Pager w client mode) |
+| **Metoda** | Sprawdza `nft list tables | grep fw4`. Toggle via `fw4 start/stop`. Auto-restore po restarcie (bezpieczeństwo). |
+
+### 6.5 Responder_Payload
+| | |
+|---|---|
+| **Autor** | Hackazillarex |
+| **Cel** | Uruchomienie Responder (LLMNR/NBT-NS/mDNS poisoner + NTLMv1/v2 credential capture) |
+| **Metoda** | Bundluje kompletny Responder (Laurent Gaffie). Auto-instalacja python3 + python3-netifaces. Uruchamia `Responder.py -I wlan0cli -w -d -F` (WPAD proxy, DHCP fingerprinting, forced WPAD auth). Interaktywny kill switch via `CONFIRMATION_DIALOG`. Sesje logowane do `/root/loot/responder/`. Wszystkie poisonery i serwery włączone (SMB, HTTP, LDAP, SQL, FTP, DNS, Kerberos, RDP, QUIC, WINRM, SNMP, MQTT, DCERPC). |
+
+### 6.6 wigle-toolkit
+| | |
+|---|---|
+| **Autor** | mik |
+| **Cel** | Zarządzanie integracją WiGLE (login, logout, upload wardrivingu) |
+| **Metoda** | D-pad menu: RIGHT=login (TEXT_PICKER user/pass → `WIGLE_LOGIN`), LEFT=logout (`WIGLE_LOGOUT`), UP=upload (iteruje `.csv` w `/root/loot/wigle/`, `WIGLE_UPLOAD` z opcjami delete/archive/leave). Workaround bugu firmware 1.0.4. |
+
+---
+
+## 7. User — Games
+
+### 7.1 1988 (Konami Code Easter Egg)
+| | |
+|---|---|
+| **Autor** | m0usem0use |
+| **Cel** | Persistent background listener wykrywający Konami Code via hardware buttons |
+| **Metoda** | Instalator dodaje `listener.sh` do `/etc/rc.local` (boot persistence). Listener czyta raw input z `/dev/input/event0` via `hexdump`. Akumuluje key-down events w buforze. Na pattern match (↑↑↓↓←→←→BA START): `LED SPECIAL` + RTTTL Contra theme + ALERT. |
+
+### 7.2 little-labyrinth
+| | |
+|---|---|
+| **Autor** | Cribbit |
+| **Cel** | Pełna gra przygodowa tekstowa — 33+ pokoje, items, boss fight |
+| **Metoda** | 989 linii. 33 pokoi jako bash functions. Inwentarz via integer flags. Kluczowe puzzle: Noob Lube, pluszowa krowa, okulary słoneczne, nmap, abs. Boss fight z Evil Server (4 rundy testujące zebrane itemy). `WAIT_FOR_INPUT` D-pad nawigacja. |
+
+### 7.3 night-of-the-glitch
+| | |
+|---|---|
+| **Autor** | Notorious Squirrel |
+| **Cel** | Horror text adventure z eksploracją, zagadkami, minimapą, wieloma zakończeniami |
+| **Metoda** | 899 linii. Dwie strefy: liniowy korytarz + free-roam Haunted Wing (12 węzłów z adjacency mapping). Puzzle: Base64 decode, anagramy, sekwencje kolorów, slot fuse. Efekty matrix-style `digit_rain()`. 4+ zakończenia (Clean Sweep, Surgeon's Cut, Too Greedy, Haunted Cleanup). |
+
+### 7.4 number_guesser
+| | |
+|---|---|
+| **Autor** | DoctorEnilno |
+| **Cel** | Zgadywanie liczby 1-100 w 5 próbach + cheat mode |
+| **Metoda** | `$RANDOM`, `NUMBER_PICKER` UI. Uwaga: znane bugi na liniach 61/63 (typo `$sernum`/`$number`). |
+
+### 7.5 Puzzle_Squirrel (Cyber Nightmares)
+| | |
+|---|---|
+| **Autor** | Notorious Squirrel |
+| **Cel** | Wyświetla linki do dwóch zewnętrznych gier CTF na GitHub Pages |
+| **Metoda** | Prosty displayer URL z `LOG` + `sleep 40`. |
+
+### 7.6 simon_says
+| | |
+|---|---|
+| **Autor** | RocketGod |
+| **Cel** | Klasyczna gra pamięciowa Simon z LED-ami i RTTTL dźwiękiem |
+| **Metoda** | 4 LED-y mapowane na kierunki (każdy = inny kolor RGB + nuta RTTTL). Adaptacyjna prędkość (350ms→130ms w zależności od poziomu). High score persisted w `/root/loot/simon_says/high_score`. `HAK5_API_POST "system/led"` z raw JSON patterns. |
+
+### 7.7 text_adventure_llm (Snow Crash Terminal)
+| | |
+|---|---|
+| **Autor** | r0yfire |
+| **Cel** | AI-generated cyberpunk text adventure via Anthropic Claude API |
+| **Metoda** | 519 linii. Wymaga `ANTHROPIC_API_KEY` + `jq`. Model: `claude-sonnet-4-20250514`. System prompt generuje JSON z 4 krokami decyzyjnymi × 2 wybory × 2 zakończenia. Node-based state machine z LEFT/RIGHT nawigacją. Cyberpunk UI z `░▒▓█` borderami. |
+
+### 7.8 war_games
+| | |
+|---|---|
+| **Autor** | r0yfire |
+| **Cel** | Statyczna 8-decyzyjna narracja interaktywna inspirowana filmem WarGames (1983) |
+| **Metoda** | 1126 linii (największe). 14 scen + 4 zakończenia (Transcendence, Redemption, Succession, Collapse). System sojuszników (matka/Chen). Pełny state tracking. Tematyczny timer odliczający. Postaci: James Lightman, MAESTRO (chińskie AI), Sarah Lightman (ex-NSA). W pełni offline. |
+
+---
+
+## 8. User — General
+
+Narzędzia ogólnego przeznaczenia i utilities.
+
+### 8.1 AddSSIDFile
+| **Autor:** Skinny | **Cel:** Bulk-load SSIDów z pliku do SSID Pool | **Metoda:** `TEXT_PICKER` → `PINEAPPLE_SSID_POOL_ADD_FILE` |
+
+### 8.2 AKeyBoardTest
+| **Autor:** Rootjunky | **Cel:** Test wszystkich keyboard UI Pagera | **Metoda:** Sekwencyjne wywołania NUMBER/IP/MAC/TEXT_PICKER |
+
+### 8.3 arp
+| **Autor:** tototo31 | **Cel:** Lista tablicy ARP | **Metoda:** `ip neigh show` (fallback `arp -a`), zapis do `/root/loot/arp/` |
+
+### 8.4 BT_Pager_Warden
+| **Autor:** oMen | **Cel:** Bluetooth proximity alert — wykrywa konkretne BT MAC | **Metoda:** Ciągły BLE scan (`hcitool lescan --duplicates` 5s cykle), grep target MACs, LED blue + ALERT na wykrycie, anti-spam via log check |
+
+### 8.5 client-access-manager
+| **Autor:** PanicAcid | **Cel:** Toggle SSH (22) i Web UI (1471) przez client WiFi | **Metoda:** UCI firewall `ACCEPT` rule na strefie `wan` dla TCP 22+1471, reorder do index 0, `fw4` restart |
+
+### 8.6 Comprehensive_Device_Data
+| **Autor:** RocketGod | **Cel:** Pełna diagnostyka systemu (hardware, sieć, radio, USB, BT, porty) | **Metoda:** Zbiera: cpuinfo, firmware version, uptime, battery, memory, storage, interfaces, USB (`lsusb`), WiFi (2.4GHz MT7628 + 5GHz MT7921AU), BT, porty TCP/UDP, połączenia, DHCP leases |
+
+### 8.7 display_image
+| **Autor:** Pixel Addict | **Cel:** Wyświetlanie custom PNG na framebufferze Pagera | **Metoda:** Python converter `convert.py` (Pillow) → RGB565 LE → `/dev/fb0` (222×480). Wyłącza vtconsole, continuous write co 0.5s. |
+
+### 8.8 external-mediatek-radio-loader
+| **Autor:** Huntz | **Cel:** Zarządzanie zewnętrznymi USB WiFi adapterami MediaTek | **Metoda:** Skanuje USB za VID `0e8d` PID `7961`. Ranking endpointów (vendor-specific preferred). UCI config `/etc/config/wireless` + `/etc/config/pineapd`. Obsługuje do 5 kart (radio2-6). Cleanup odłączonych. |
+
+### 8.9 favoritesmanager
+| **Autor:** RootJunky | **Cel:** Zarządzanie folderem ulubionych payloadów | **Metoda:** CRUD menu: Add (browse categories → copy), Remove, Update (find source → replace), Exit |
+
+### 8.10 FullPullPRUpload
+| **Autor:** Austin + Hackazillarex | **Cel:** Instalacja payloadów z konkretnego GitHub PR | **Metoda:** GitHub API → PR metadata → paginowana lista zmienionych plików → download ZIP → extract → per-file review/batch install. Self-update protection. |
+
+### 8.11 gps-checker
+| **Autor:** mik | **Cel:** Weryfikacja odbierania danych GPS | **Metoda:** `gpspipe -r` z 5s timeout. Restart `gpsd` jeśli brak danych. Status green/yellow/red. |
+
+### 8.12 gv_alerts (Google Voice Alerts)
+| **Autor:** brAinphreAk | **Cel:** Przekazywanie połączeń/SMS/voicemail z Google Voice na Pager | **Metoda:** Google Apps Script webhook → Gmail search → klasyfikacja wiadomości → MD5 dedup. Payload instaluje cron job. Webhook optymalizuje bandwidth (70B response przy braku zmian). |
+
+### 8.13 HackStats
+| **Autor:** Unit98.1 | **Cel** | Szybkie statystyki handshake'ów i pcapów |
+| **Metoda** | `find` w `/root/loot/handshakes/`: zliczanie `.22000`, `*handshake.22000`, `.pcap` |
+
+### 8.14 handshake_2_usb
+| **Autor:** BlackGrouse | **Cel:** Eksport handshake'ów na USB | **Metoda:** `lsblk` → mount z sync → `cp` z `tr ':' '_'` (filesystem compat) → `sync` → `umount -l` |
+
+### 8.15 handshake_sanitiser
+| **Autor:** PanicAcid | **Cel:** Deduplikacja, quality control i normalizacja plików handshake | **Metoda:** 3 fazy: (1) Deduplikacja (grupowanie po event ID, zachowaj najnowszy). (2) Quality Purge (usuń partial jeśli istnieje full handshake). (3) Windows Normalization (`tr ':' '-'`). |
+
+### 8.16 hashtopolis_manual_upload
+| **Autor:** Hunt-Z / TheDadNerd | **Cel:** Ręczny upload handshake'ów do Hashtopolis | **Metoda:** Dual-layer config (plik + PAYLOAD_SET_CONFIG). Walidacja serwera/API key. Pipeline: find `.22000` → extract SSID → base64 → createHashlist → runPretask. Opcja usunięcia po sukcesie. |
+
+### 8.17 ICMP_ALERT
+| **Autor:** spywill | **Cel:** Alert przy wykryciu ping/traceroute + tymczasowa blokada ICMP | **Metoda:** `tcpdump` filtrujący ICMP echo + UDP 33434-33534. Na wykrycie: backup nft → temporary drop rules → 60s countdown → restore. Custom RTTTL ringtone. |
+
+### 8.18 irc_chat
+| **Autor:** Hackazillarex | **Cel:** Interaktywny klient IRC na Pagerze | **Metoda:** Raw TCP via `/dev/tcp` do `irc.oftc.net:6667`. NICK/USER/JOIN protocol. Background receive loop z PING/PONG keepalive. DOWN=reply, B=exit. Zero zewnętrznych zależności. |
+
+### 8.19 LEDs_Timeout
+| **Autor:** Z3r0L1nk | **Cel:** Auto-wyłączanie LED gdy ekran się wygasza (oszczędność baterii) | **Metoda:** Persistent `procd` service pollujący `/sys/class/backlight/backlight_pwm/brightness` co 0.5s. Poniżej progu = LEDs off, powyżej = restore. |
+
+### 8.20 log_viewer
+| **Autor:** Brandon Starkweather | **Cel** | Przeglądarka logów z kolorowym parsowaniem |
+| **Metoda** | Dwa tryby: Interactive (browse `/root/loot`) i Headless (path as arg). Parsed mode: `awk` wyciąga timestamps=żółty, IP/MAC=niebieski, credentials=zielony, passwords=czerwony. Batch 25 linii. Tail mode dla dużych plików. |
+
+### 8.21 lte_configure
+| **Autor:** Hak5Darren | **Cel:** Konfiguracja Hak5 eLiTE Mobile Broadband (LTE) | **Metoda:** 4 fazy: dependency (uqmi), APN check/set, modem verify (Quectel EG25-G, VID 2c7c:0125), status display. UCI config proto=qmi. |
+
+### 8.22 MAC_spoofer
+| **Autor:** Brandon Starkweather | **Cel:** MAC spoofing z kategoryzowanymi profilami urządzeń |
+| **Metoda** | 5 środowisk: Home (iPhone 15, Samsung TV, Echo), Corporate (HP LaserJet, Cisco Phone), Commercial (Zebra scanner, Verifone POS), Industrial (Siemens PLC, Rockwell), Ethernet (MSI, Cisco). Verified OUI + random 3-byte suffix. `ifconfig hw ether`. Volatile (nie przeżywa restart). |
+
+### 8.23 mobile2gps
+| **Autor:** Ryan Pohlner | **Cel:** Użycie telefonu jako GPS Pagera przez przeglądarkę | **Metoda:** Go binary (MIPS cross-compiled) tworzy PTY jako fake serial GPS. HTTPS server (port 1993, self-signed TLS). Browser Geolocation API → POST → konwersja do NMEA GPRMC → `gpsd`. User łączy się przez Management AP. |
+
+### 8.24 mtr
+| **Autor:** tototo31 | **Cel:** My Traceroute (traceroute + ping combined) | **Metoda:** Auto-install `mtr`, prompt for target/count, `mtr -c <n> -n -r <host>`, loot output |
+
+### 8.25 netstat
+| **Autor:** tototo31 | **Cel:** Lista połączeń sieciowych (7 widoków) | **Metoda:** 7 trybów: all, listening, TCP, UDP, z PID, IPv4, IPv6. Output do `/root/loot/netstat/` |
+
+### 8.26 network_status
+| **Autor:** spencershepard | **Cel:** Quick diagnostic — interfejsy, IP, internet | **Metoda:** Iteruje `/sys/class/net`, sprawdza UP/IP/ping 8.8.8.8 per interface |
+
+### 8.27 NotifyMe
+| **Autor:** 0i41E | **Cel:** Timed notification/alarm (przypomnienie) | **Metoda:** Prompt datetime (YYYY-MM-DD HH:MM) + reason. Loop porównujący epoch. RTTTL "Desk Phone" + PROMPT. |
+
+### 8.28 nslookup
+| **Autor:** tototo31 | **Cel:** DNS lookup z konfigurowalnym record type i serwerem | **Metoda:** `nslookup -type=<type> <target> [server]`, pre-populate DNS z `/etc/resolv.conf` |
+
+### 8.29 opkg_backup
+| **Autor:** StuxMirai | **Cel:** Backup listy user-installed pakietów (przeżywa firmware update) | **Metoda:** Iteruje `opkg list-installed`, filtruje "user installed", zapis do `/root/user_installed_packages.txt` |
+
+### 8.30 opkg_restore
+| **Autor:** StuxMirai | **Cel:** Reinstalacja pakietów z backupu po firmware update | **Metoda:** Czyta listę → `opkg update` + `opkg install` w pętli |
+
+### 8.31 Package_Installer
+| **Autor:** spywill | **Cel:** Interaktywny instalator pakietów | **Metoda:** TEXT_PICKER (space-separated nazwy), cross-reference z zainstalowanymi, `opkg -d mmc install` |
+
+### 8.32 Pager_Alarm_Clock
+| **Autor:** spywill | **Cel:** Alarm clock w tle z AM/PM | **Metoda:** Parse datetime → epoch → background loop → RTTTL + PROMPT. Fizyczny przycisk (via `/dev/input/event0` raw read) wyłącza alarm. |
+
+### 8.33 PagerBoy
+| **Autor:** Brandon Starkweather | **Cel:** Retro GameBoy theme dla web UI Pagera | **Metoda:** Replace `/pineapple/ui/index.html` z custom HTML (887 linii, 8 colorways, scanlines, pulsing LED, D-pad CSS, login overlay). Toggle UP/DOWN. |
+
+### 8.34 payload_search
+| **Autor:** tototo31 | **Cel:** Wyszukiwanie payloadów po nazwie/tytule/autorze | **Metoda:** Skanuje `/mmc/root/payloads/**/*.sh`, grep metadanych z headerów, case-insensitive search |
+
+### 8.35 ping
+| **Autor:** tototo31 | **Cel:** Ping z logowaniem | **Metoda:** `ping -c <count> <target>`, loot do `/root/loot/ping/` |
+
+### 8.36 Pocket_Terminal
+| **Autor:** Zeriaklr | **Cel:** Interaktywny shell — wykonywanie dowolnych komend z Pagera | **Metoda:** Loop: TEXT_PICKER → `eval` → LOG output → opcjonalny zapis do `/root/loot/Term/` |
+
+### 8.37 PORT_ALERT
+| **Autor:** spywill | **Cel:** Alert przy port scan + tymczasowa blokada wszystkich portów (60s) | **Metoda:** `tcpdump` SYN bez ACK. ≥20 SYN = alarm. Flush nft rules → drop all (except loopback + established). 60s countdown → restore. |
+
+### 8.38 privacy-mode
+| **Autor:** Rootjunky | **Cel:** Toggle cenzury MAC/SSID w menu Recon | **Metoda:** Zapis `{"censor": true/false}` do `/usr/debug.json`, restart pineapplepager |
+
+### 8.39 PullPayloadPR / PullRingtonePR / PullThemePR
+| **Autor:** Austin + Hackazillarex | **Cel:** Download payloadów/ringtone'ów/themes z PR na GitHubie | **Metoda:** GitHub API → PR files → download ZIP → extract → install. Trzy payloady, ten sam wzorzec, różne repozytoria. |
+
+### 8.40 Ringtone_tester
+| **Autor:** spywill | **Cel:** Odtwarzanie każdego zainstalowanego ringtone'a | **Metoda:** Skanuje `/mmc/root/ringtones/` za RTTTL (≥2 colons). `RINGTONE` API z retry + status polling. |
+
+### 8.41 route
+| **Autor:** tototo31 | **Cel:** Wyświetlanie tablicy routingu (5 widoków) | **Metoda:** `ip route` preferred (fallback `route -n`). Widoki: all, IPv4, IPv6, default, per-interface. |
+
+### 8.42 run-in-terminal
+| **Autor:** RootJunky | **Cel:** Uruchamianie payloadów Pagera w SSH terminal | **Metoda:** Shim `pager_ducky_shim.sh` reimplementuje DuckyScript UI jako terminal equivalents (CONFIRMATION_DIALOG→y/N prompt, PICKER→read, SPINNER→echo). `run.sh` sources shim → executes payload. |
+
+### 8.43 SetSSIDPool
+| **Autor:** MonsieurMarc | **Cel:** Reset SSID pool do predefiniowanej listy | **Metoda:** `PINEAPPLE_SSID_POOL_CLEAR` → loop `PINEAPPLE_SSID_POOL_ADD`. Edytuj tablicę w skrypcie. |
+
+### 8.44 SkimmerScanner
+| **Autor:** Adam Glenn | **Cel:** Detekcja skimmerów kart kredytowych przez BLE/BT scan | **Metoda** | Multi-factor scoring: +2 signature match, +3 known skimmer modules (HC-05/06, BT04, JDY, MLT-BT, SPP-C), +2 suspicious vendors (Shenzhen, Guangdong), +2 unnamed non-random. Risk levels: HIGH (≥5), MEDIUM (3-4). LED + wibracja + ALERT. Extensible signature DB. |
+
+### 8.45 SpeedTest + SpeedTest_Config
+| **Autor:** billyjbryant | **Cel:** Test prędkości internetu z network intelligence | **Metoda:** Downloads `speedtest-cli` z GitHub. Zbiera: SSID, local/public IP, geolocation (ip-api.com). Opcje: loot generation, skip upload (OOM prevention). Companion Config payload toggleuje opcje via PAYLOAD config store. |
+
+### 8.46 StripConnectedClients / StripOpenAP / TopProbed
+| **Autor:** Skinny | **Cel:** Ekstrakcja danych z recon.db | **Metoda:** SQLite queries: (1) Connected clients + vendor OUI lookup, (2) Open APs → deduplicated SSIDs for pool building, (3) Most-probed SSIDs ranked by unique device count. |
+
+### 8.47 USB_Mount_Loot_Transfer + USB_Unmount
+| **Autor:** Stuffy24 | **Cel:** Bezpieczne kopiowanie loot na USB + unmount | **Metoda:** Transfer: detect USB → mount → double confirm "YES" → cp -a → manifest.txt. Unmount: check mounted → sync → umount. |
+
+### 8.48 UpdatePayloads / UpdateRingtones / UpdateThemes
+| **Autor:** cococode | **Cel:** Sync zasobów z master branch GitHub | **Metoda:** Payloads/Ringtones: ZIP download → diff → conflict resolution (interactive/batch). Themes: `git clone`/`git pull` (incremental). Self-update protection via queued copy. |
+
+### 8.49 Weather
+| **Autor:** spywill | **Cel:** Prognoza pogody (auto-detect city lub ręczne wpisanie) | **Metoda:** `curl ipinfo.io/city` → `curl wttr.in/<city>?format=j1` → `jq` parse → ASCII tabelka 3-day forecast |
+
+### 8.50 Pozostałe utilities
+| Payload | Cel | Metoda |
+|---|---|---|
+| **WindowsFriendlyHandshakes** | Usuwanie dwukropków z nazw plików handshake | `mv ${f//:/}` |
+| **switch_client_wifi** | Szybkie przełączanie profili WiFi | PAYLOAD_GET_CONFIG → WIFI_CONNECT na wlan0cli |
+| **switch_client_wifi_configuration** | Zarządzanie profilami WiFi (CRUD) | PAYLOAD_SET/GET/DEL_CONFIG |
+| **toggle_ab_leds** | Toggle LED-ów A/B | Zapis brightness do sysfs |
+| **traceroute** | Traceroute | `traceroute -q 1 <target>` |
+| **usb-storage-mounting** | Auto detect/mount/unmount USB | `blkid` → mount/umount toggle |
+| **wan_verifier** | Weryfikacja IP WAN vs baseline (anonimowość) | `ip-api.com/json` → porównanie z saved baseline. API: `--check`/`--silent` |
+| **wardrive_activate** | One-click GPS + WiGLE wardriving | `GPS_LIST`→`GPS_CONFIGURE`→`WIGLE_START` |
+| **whois** | WHOIS lookup z filtrowaniem boilerplate | `whois <target>`, grep -v 30+ wzorców boilerplate |
+
+---
+
+## 9. User — Interception
+
+Payloady do aktywnego przechwytywania / zakłócania ruchu.
+
+### 9.1 AntennaCheka
+| **Autor:** Notorious Squirrel | **Cel:** Benchmark anteny wewnętrzna vs USB (RSSI) | **Metoda:** Auto-detect PHYs → monitor interfaces → tcpdump capture → porównanie average RSSI per antena. Konfigurowalny kanał/czas. |
+
+### 9.2 fenris (FENRIR Suite)
+| **Autor:** HaleHound | **Cel:** Deauthentication storm tool | **Metoda:** Dwa tryby: **Targeted** (single AP) i **Storm** (mass deauth all APs). `PINEAPPLE_DEAUTH_CLIENT` w ciągłej pętli. Konfigurowalny interwał/rundy. Część suite FENRIR (HUGINN→FENRIS→SKOLL→LOKI). |
+
+### 9.3 goodportal_configure
+| **Autor:** spencershepard (GRIMM) | **Cel:** Pełny captive portal z credential harvesting | **Metoda:** nginx + PHP-FPM portal on LAN. DNS hijacking via dnsmasq (port 1053). nftables NAT redirect. `captiveportal.php` loguje credentials do `/root/loot/goodportal/`. Client whitelisting via nftables. Wsparcie custom Evil Portals z GitHub. IPv6 disable. |
+
+### 9.4 goodportal_clear_whitelist
+| **Cel:** Czyszczenie whitelist captive portalu (force re-auth) |
+
+### 9.5 goodportal_remove
+| **Cel:** Kompletny cleanup: DNS, firewall rules, nginx restore, IPv6 re-enable |
+
+---
+
+## 10. User — Known Unstable
+
+### 10.1 live_walk
+| **Autor:** MusicalVR | **Cel:** Ciągłe logowanie sieci WiFi via aircrack-ng | **Metoda:** Auto-install aircrack-ng → airmon-ng monitor → airodump-ng continuous CSV logging do `/root/loot/live_walk/`. **Znane problemy.** |
+
+---
+
+## 11. User — Prank
+
+### 11.1 Paper_Pusher
+| **Autor:** OSINTI4L | **Cel:** Spam print jobs do drukarek WiFi | **Metoda:** nmap scan port 9100 → netcat raw print data z custom text × page count |
+
+### 11.2 Portal_Pwn
+| **Autor:** OSINTI4L | **Cel:** Crash/spam ESP32 Marauder Evil Portals | **Metoda:** Łączy się z evil portal SSID, spamuje HTML form z random data lub wysyła 3KB crash payload via curl. Testowane: Marauder v6.1, Flipper Zero Momentum. |
+
+### 11.3 ssid_chaos
+| **Autor:** RocketGod | **Cel:** Generator tematycznych nazw SSID | **Metoda:** 8 tematów (Passive Aggressive, Dad Jokes, Hacker/FBI, Horror, Gamer, Movies...) × ~20 SSIDs. `PINEAPPLE_SSID_POOL_*` commands. |
+
+---
+
+## 12. User — Reconnaissance
+
+Zaawansowane narzędzia rozpoznawcze (24 payloady).
+
+### 12.1 IP_Subnetter_Getter
+| **Autor:** THENRGLABS | **Cel:** All-in-one network recon (public IP, ARP, nmap, CVE) | **Metoda:** ARP discovery → nmap service+version+CVE scripts |
+
+### 12.2 OSINT-U-Asked
+| **Autor:** Hackazillarex | **Cel:** Username OSINT na setkach platform (Sherlock-inspired) | **Metoda:** JSON database 834 lines, 3 metody detekcji (status_code, message, response_url) |
+
+### 12.3 SMBspy
+| **Autor:** Hackazillarex | **Cel:** SMB share discovery (port 445) | **Metoda:** Interface picker → nmap 445 → log suggestions |
+
+### 12.4 TRIG_MAC_2.0
+| **Autor:** THENRGLABS | **Cel:** Wireless tripwire z GPS | **Metoda:** Monitor target SSIDs/WiFi MACs/BLE MACs. 120s cooldown, silent mode, GPSD geo-tagging |
+
+### 12.5 alien_ap
+| **Autor:** hannesrichter | **Cel:** Wykrywanie AP z nieprawidłowym kodem kraju | **Metoda:** tcpdump beacon frames → custom AWK parser 802.11 country code IE |
+
+### 12.6 blue_clues
+| **Autor:** Brandon Starkweather | **Cel:** Aktywny audyt Bluetooth | **Metoda:** OUI vendor lookup, Class-of-Device translation, SDP service discovery, dedup, ignore list |
+
+### 12.7 bluetooth
+| **Autor:** Hackazillarex | **Cel:** Full Classic + BLE scan | **Metoda:** 90s combined: `hcitool scan` + `bluetoothctl scan` |
+
+### 12.8 curly
+| **Autor:** curtthecoder | **Cel:** Masowy web recon & vulnerability scanner (2976 linii — NAJWIĘKSZY payload) | **Metoda:** 6 trybów skanowania, 50+ kategorii endpointów: WordPress CVE, SSL/TLS analiza, parameter discovery, robots.txt, sitemap.xml, admin paths, API, backup files, git/svn exposure. Discord webhook. Rate limiting. |
+
+### 12.9 device_hunter
+| **Autor:** RocketGod + NotPike | **Cel:** Signal strength "hot/cold" device finder | **Metoda:** `_pineap MONITOR` real-time dBm. LED/sound/vibration feedback skalowany do siły sygnału. |
+
+### 12.10 ethernet_mod
+| **Autor:** Hackazillarex | **Cel:** Quick USB Ethernet recon | **Metoda:** Gateway + 4 hosts ARP → nmap top 10 ports |
+
+### 12.11 find_hackers
+| **Autor:** NULLFaceNoCase | **Cel:** Detekcja urządzeń hakerskich w pobliżu | **Metoda:** Sygnatury: Pineapple (OUI 00:13:37), Flipper Zero (BLE 80:E1:26), stingray, karma attacks, evil twins. PineAP recon + BLE scan. |
+
+### 12.12 flipper_detector
+| **Cel:** Prosty BLE scanner szukający Flipper Zero (OUI 80:E1:26) |
+
+### 12.13 hati (FENRIR Suite)
+| **Autor:** HaleHound | **Cel:** Clientless WPA PMKID capture | **Metoda:** `hcxdumptool` PMKID association attacks + `hcxpcapngtool` → hashcat `.22000`. Scan ALL lub Targeted. |
+
+### 12.14 huginn (FENRIR Suite)
+| **Autor:** HaleHound | **Cel:** WiFi + BLE identity correlator defeating MAC randomization | **Metoda:** Dual-radio capture (tcpdump WiFi + hcitool BLE). Correlation engine: vendor OUI, temporal proximity, appearance patterns. Buduje profile tożsamości łączące WiFi MAC z BLE MAC. |
+
+### 12.15 live_probe
+| **Autor:** dudgy | **Cel:** Live WiFi probe request monitor | **Metoda:** tcpdump `wlan1mon` → MAC extraction → dedup window → Discord webhook batch / loot file / screen display. Configurable `.conf` file. |
+
+### 12.16 nmap_custom
+| **Autor:** 0xmupa | **Cel:** Interaktywny nmap w stylu Zenmap | **Metoda:** 9 profili (Quick, Intense, SYN, UDP, Full Port, Custom). Auto- lub manual target. Output -oA. |
+
+### 12.17 nmap_host_discovery
+| **Autor:** tototo31 | **Cel:** Host discovery z wieloma metodami pingowania | **Metoda:** Subnet auto-detect + CIDR normalization. `nmap -sn -PE -PP -PS -PA`. XML/nmap/gnmap output. |
+
+### 12.18 nmap_subnet
+| **Autor:** cococode | **Cel:** Quick SYN scan wybranej podsieci | **Metoda:** List subnets → select → `nmap -Pn -sS -F` |
+
+### 12.19 nosey-neighbor
+| **Autor:** curtthecoder | **Cel:** Komprehensywny pasywny recon bezprzewodowy (1502 linii) | **Metoda:** 8 faz: GPS geo-tag, system status, wireless recon (beacon sniffing + channel hopping 2.4/5/DFS), probed SSID collection (PineAP + tcpdump), vendor ID (whoismac API), traffic pcap, security findings (open/WEP), **intelligence summary** (weighted scoring: commercial vs residential, density tiers, vehicle/phone hotspot detection, ISP ID). Channel heatmap. Auto-update. |
+
+### 12.20 probehound
+| **Autor:** Doc Voom | **Cel:** Targeted probe request sniffer (szuka urządzeń poszukujących konkretnej sieci) | **Metoda:** tcpdump `wlan0mon` filtrowany po target SSID (partial match). Alert + ringtone na wykrycie. Inspirowane "Chasing Your Tail" (Matt Edmondson). |
+
+### 12.21 query_shodan_internet_db
+| **Autor:** tototo31 | **Cel:** Shodan InternetDB lookup (open ports, CVEs, CPEs) — BEZ API key | **Metoda:** `https://internetdb.shodan.io/{ip}` (free API). Auto DNS resolve. Private/reserved IP filtering. |
+
+### 12.22 verdandi (FENRIR Suite)
+| **Autor:** HaleHound | **Cel:** Probe fingerprint engine defeating MAC randomization (najzaawansowany!) | **Metoda:** Ekstrakcja Information Elements z hex-dumpów probe requests. **3 warstwy fingerprinta:** (L1) Radio Capabilities (HT/VHT/HE Caps, Supported Rates), (L2) OS/Driver Signature (Extended Caps, Vendor Specific OUIs, IE tag ORDER hash), (L3) RSSI differentation (rozwiązuje "cohort problem" — identyfikacja urządzeń tego samego modelu po odległości). Channel hopping 2.4/5GHz. MD5 hash fingerprinta. |
+
+### 12.23 wifi_guppy
+| **Autor:** JustSomeTrout | **Cel:** Wizualizacja kongestii kanałów WiFi | **Metoda:** Temp managed interface na phy1 → `iwinfo scan` → parsowanie band/channel → color-coded bar graph (green≤3, yellow 4-7, red 8+). Active scan. |
+
+### 12.24 wpa_handshake_quality_check
+| **Autor:** benwies | **Cel:** Offline analiza jakości przechwyconych handshake'ów | **Metoda:** tcpdump na `.pcap` szukając EAPOL frames (0x888e). Klasyfikacja: VALID_FULL (≥4), PARTIAL (1-3), INVALID (0). MD5 dedup. Sortowanie do podkatalogów. |
+
+---
+
+## 13. User — Remote Access
+
+### 13.1 Pager_keystrokes
+| **Autor:** spywill | **Cel:** Odczyt keystroków z Hak5 Key Croc | **Metoda:** SSH via `sshpass` do Key Croc → pobiera `croc_char.log` → live stream `tail -f`. Saved credentials. |
+
+### 13.2 Pager_quack
+| **Autor:** spywill | **Cel:** Wysyłanie komend DuckyScript do Key Croc z Pagera | **Metoda:** SSH → `QUACK` single command lub plik `Quack.txt`. Shared config z Pager_keystrokes. |
+
+### 13.3 Reverse_Shell
+| **Autor:** spywill | **Cel:** SSH reverse tunnel do zdalnego hosta | **Metoda:** sshpass → `ssh -N -R <port>:localhost:22 user@remote`. Health check. Persistent credentials. Detect/kill existing tunnels. |
+
+### 13.4 Tunnel_Rat
+| **Autor:** OSINTI4L | **Cel** | Kompletny implant workflow: handshake → crack → join network → reverse SSH → C2 |
+| **Metoda** | 14-krokowy łańcuch ataku: (1) Target SSID prompt, (2) 60s recon, (3) channel lock, (4) deauth + handshake capture loop, (5) management AP spawn (atakujący pobiera hash), (6) offline cracking → enter password, (7) shutdown mgmt AP, (8) connect to target network, (9) internet check, (10) public IP → Discord webhook, (11) VPS C2 reachability + Discord notify, (12) reverse SSH tunnel port 2222, (13) Discord status, (14) attacker: `ssh -p 2222 root@127.0.0.1`. |
+
+### 13.5 hidx_stealthlink_client
+| **Autor:** spencershepard (GRIMM) | **Cel:** Remote shell na airgapped systemach via O.MG cable + Pager bridge | **Metoda:** Python3 TCP listener (port 1234) w tmux. O.MG → management AP WiFi → HIDX StealthLink protocol. Chunked I/O (8-byte). Access via `tmux a -t hidx`. |
+
+### 13.6 nautilus
+| **Autor:** JustSomeTrout + Z3r0L1nk | **Cel:** Web-based payload launcher i command center | **Metoda:** `uhttpd` port 8888 z CGI. Features: browse/search/run/stop payloads z przeglądarki, live console, full shell via `ttyd` (port 7681), GitHub PR browsing, Virtual Pager integration, virtual D-pad, WiFi config. Python3 TCP proxy (port 8890) dla Pineapple API. |
+
+### 13.7 pagecord (PageCord)
+| **Autor:** beigeworm | **Cel:** Kontrola Pagera przez Discord bota | **Metoda:** Polling Discord API via `curl`. Auth via Discord user ID + password. Komendy: sysinfo, download/upload, payloads, shell commands, DuckyScript. Output batched 2000-char chunks. Background mode. |
+
+### 13.8–13.13 Tailscale Suite (6 payloadów)
+| **Autor:** JAKONL | **Payloady:** |
+| **tailscale_installer** | Download + install Tailscale for mipsle. Procd init script. |
+| **tailscale_configure** | Auto-start + interactive URL-based auth (5-min timeout) |
+| **tailscale_connect** | Start daemon + `tailscale up` |
+| **tailscale_disconnect** | `tailscale down` |
+| **tailscale_status** | Connected/Stopped/NeedsLogin, IP, network map |
+| **tailscale_uninstaller** | Double confirm → stop → remove all binaries/config/state |
+
+---
+
+## 14. User — Virtual Pager
+
+### 14.1 pager_skinner
+| **Autor:** Amilious | **Cel:** Menedżer skinów UI Virtual Pagera | **Metoda:** 9 skin .zip files (blue, dark, green, hotpink, purple etc.). Extract → replace `/pineapple/ui/images/`. D-pad scroll. |
+
+### 14.2 virtual_pager_enhancer
+| **Autor:** Rektile404 | **Cel:** Rozszerzenia Virtual Pagera (client-side JS) | **Metoda:** Inject `payload.js` (542 lines) do `index.html`. uhttpd na port 4040 z CGI `api.sh`. Features: loot browser & download, custom skins/backgrounds, system info (CPU/RAM/disk), payload updater z GitHub, custom button images. |
+
+---
+
+## 15. User — Incident Response
+
+**Status:** Puste — tylko plik PLACEHOLDER. Brak payloadów.
+
+---
+
+## Podsumowanie statystyczne
+
+| Kategoria | Liczba payloadów | Najciekawsze |
+|---|---|---|
+| **Alerts** | 8 | hashtopolis-autocrack, device_profiler |
+| **Recon — AP** | 7 | Connect-To-AP, Quick-Clone-Pro, device-hunter-recon |
+| **Recon — Client** | 2 | Client-HackStats |
+| **Evil Portal** | 7 | install_evil_portal (930 linii) |
+| **Examples** | 12 | Pełna dokumentacja DuckyScript UI |
+| **Exfiltration** | 6 | dropbox_upload (875 linii, AES-256), DUMPY_REVERSE_DUCKY, Responder |
+| **Games** | 8 | war_games (1126 linii), little-labyrinth, text_adventure_llm |
+| **General** | 50 | mobile2gps, MAC_spoofer, irc_chat, SkimmerScanner, nautilus |
+| **Interception** | 5 | fenris (deauth), goodportal_configure |
+| **Known Unstable** | 1 | live_walk |
+| **Prank** | 3 | ssid_chaos, Paper_Pusher |
+| **Reconnaissance** | 24 | curly (2976 linii!), verdandi, huginn, nosey-neighbor |
+| **Remote Access** | 13 | Tunnel_Rat (pełny łańcuch ataku), nautilus, Tailscale suite |
+| **Virtual Pager** | 2 | virtual_pager_enhancer |
+| **Incident Response** | 0 | — |
+| **ŁĄCZNIE** | **~148 payloadów** | |
+
+---
+
+## Główne techniki wykryte w repozytorium
+
+| Kategoria techniczna | Przykłady payloadów |
+|---|---|
+| **WPA Handshake Capture** | hati, auto_hcx_capture, Tunnel_Rat |
+| **Distributed Hash Cracking** | hashtopolis-autocrack, hashtopolis_manual_upload |
+| **Captive Portal / Evil Twin** | install_evil_portal, goodportal_configure, Quick-Clone-Pro |
+| **MAC Randomization Defeat** | verdandi (IE fingerprinting), huginn (cross-radio correlation), device_profiler (LAA bit) |
+| **Credential Harvesting** | Responder (LLMNR/NTLM), Evil Portal (HTTP forms) |
+| **Network Recon** | nmap_*, nosey-neighbor, curly, ethernet_mod, IP_Subnetter_Getter |
+| **Data Exfiltration** | dropbox_upload (AES-256 + OAuth2), handshake_2_usb, USB_Mount_Loot_Transfer |
+| **Reverse Access / C2** | Tunnel_Rat, Reverse_Shell, Tailscale suite, nautilus, pagecord |
+| **Bluetooth Recon** | blue_clues, SkimmerScanner, find_hackers, flipper_detector, BT_Pager_Warden |
+| **Signal Tracking** | device_hunter, device-hunter-recon (LED/audio RSSI feedback) |
+| **Anti-BadUSB** | DUMPY_REVERSE_DUCKY (rmmod usbhid + HID detection) |
+| **DNS Hijacking** | Evil Portal (dnsmasq wildcard → nftables DNAT) |
+| **Deauthentication** | fenris (targeted + storm modes) |
+| **OSINT** | OSINT-U-Asked, query_shodan_internet_db, curly |
+| **Wardriving** | wardrive_activate, wigle-toolkit, mobile2gps, nosey-neighbor |
+| **Framebuffer Display** | display_image (RGB565 LE, 222×480) |
+| **Persistent Services** | LEDs_Timeout, 1988, Evil Portal (procd/rc.local) |
+| **AI Integration** | text_adventure_llm (Anthropic Claude API) |
